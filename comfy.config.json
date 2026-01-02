@@ -1,0 +1,5 @@
+{
+    "id": "comfyui-lattice-manim",
+    "entry_point": "web/index.js"
+}
+
