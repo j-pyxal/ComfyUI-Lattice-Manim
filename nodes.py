@@ -6,18 +6,25 @@ import subprocess
 import tempfile
 
 class ManimScriptNode:
-    CATEGORY = "Lattice/Experimental"
-    INPUT_TYPES = {
-        "required": {
-            "code": ("STRING", {"multiline": True}),
-            "frame_count": ("INT", {"default": 30, "min": 1, "max": 1000}),
-            "width": ("INT", {"default": 1920, "min": 1, "max": 7680}),
-            "height": ("INT", {"default": 1080, "min": 1, "max": 4320})
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "code": ("STRING", {"multiline": True, "default": "class Example(Scene):\n    def construct(self):\n        c = Circle(color=BLUE)\n        self.play(Create(c))"}),
+                "frame_count": ("INT", {"default": 30, "min": 1, "max": 1200}),
+                "width": ("INT", {"default": 512, "min": 64, "max": 4096}),
+                "height": ("INT", {"default": 512, "min": 64, "max": 4096}),
+            },
         }
-    }
+
     RETURN_TYPES = ("IMAGE", "MASK")
+    RETURN_NAMES = ("image", "mask")
     FUNCTION = "render_manim"
-    
+    CATEGORY = "Lattice/Experimental"
+
     def render_manim(self, code, frame_count, width, height):
         try:
             import manim
@@ -71,9 +78,9 @@ config.frame_rate = 30
                 if output_mp4:
                     break
             
-            if not output_mp4 or not os.path.exists(output_mp4):
+            if not output_mp4:
                 error_msg = result.stderr if result.stderr else result.stdout
-                raise Exception(f"Manim rendering failed. Output file not found. Error: {error_msg}")
+                raise Exception(f"Manim rendering failed. Output file not found.\nLogs:\n{error_msg}")
             
             # Read video frames using OpenCV
             cap = cv2.VideoCapture(output_mp4)
