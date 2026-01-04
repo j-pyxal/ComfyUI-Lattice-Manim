@@ -246,13 +246,97 @@ def process_audio_input(audio_input, temp_dir):
                 
                 logger.debug(f"Saving audio: shape={audio_tensor.shape}, dtype={audio_tensor.dtype}, sample_rate={sample_rate}")
                 
-                # Save using torchaudio
-                try:
-                    torchaudio.save(audio_path, audio_tensor, int(sample_rate))
-                except Exception as e:
-                    logger.error(f"Failed to save audio tensor: shape={audio_tensor.shape}, dtype={audio_tensor.dtype}, sample_rate={sample_rate}")
-                    logger.error(f"Audio tensor stats: min={audio_tensor.min():.3f}, max={audio_tensor.max():.3f}, mean={audio_tensor.mean():.3f}")
-                    raise RuntimeError(f"Failed to save audio file: {e}") from e
+                # Ensure directory exists
+                os.makedirs(os.path.dirname(audio_path), exist_ok=True)
+                
+                # Try multiple methods to save audio
+                saved = False
+                last_error = None
+                
+                # Method 1: Try torchaudio first
+                if HAS_TORCHAUDIO:
+                    try:
+                        torchaudio.save(audio_path, audio_tensor, int(sample_rate))
+                        saved = True
+                        logger.debug("Audio saved successfully using torchaudio")
+                    except Exception as e:
+                        last_error = e
+                        logger.warning(f"torchaudio.save() failed: {e}. Trying alternative method...")
+                
+                # Method 2: Try soundfile directly with numpy array
+                if not saved:
+                    try:
+                        import soundfile as sf
+                        # Convert to numpy: [channels, samples] -> (samples, channels) for soundfile
+                        audio_np = audio_tensor.cpu().numpy()
+                        if audio_np.shape[0] == 1:
+                            # Mono: [1, samples] -> (samples,)
+                            audio_np = audio_np[0]
+                        else:
+                            # Multi-channel: [channels, samples] -> (samples, channels)
+                            audio_np = audio_np.T
+                        
+                        # Ensure path is normalized (Windows compatibility)
+                        audio_path_normalized = os.path.normpath(audio_path)
+                        sf.write(audio_path_normalized, audio_np, int(sample_rate), subtype='PCM_16')
+                        saved = True
+                        logger.debug("Audio saved successfully using soundfile directly")
+                    except ImportError:
+                        logger.warning("soundfile not available for direct save")
+                    except Exception as e:
+                        last_error = e
+                        logger.warning(f"soundfile.write() failed: {e}. Trying pydub fallback...")
+                
+                # Method 3: Try pydub as last resort
+                if not saved and HAS_PYDUB:
+                    try:
+                        # Convert to numpy and create AudioSegment
+                        audio_np = audio_tensor.cpu().numpy()
+                        if audio_np.shape[0] == 1:
+                            audio_np = audio_np[0]
+                        else:
+                            audio_np = audio_np.T
+                        
+                        # Convert to int16 for pydub
+                        audio_int16 = (audio_np * 32767).astype(np.int16)
+                        
+                        # Create AudioSegment
+                        if len(audio_int16.shape) == 1:
+                            # Mono
+                            audio_segment = AudioSegment(
+                                audio_int16.tobytes(),
+                                frame_rate=int(sample_rate),
+                                channels=1,
+                                sample_width=2  # 16-bit = 2 bytes
+                            )
+                        else:
+                            # Multi-channel
+                            audio_segment = AudioSegment(
+                                audio_int16.tobytes(),
+                                frame_rate=int(sample_rate),
+                                channels=audio_int16.shape[1],
+                                sample_width=2
+                            )
+                        
+                        audio_segment.export(audio_path, format="wav")
+                        saved = True
+                        logger.debug("Audio saved successfully using pydub")
+                    except Exception as e:
+                        last_error = e
+                        logger.warning(f"pydub export failed: {e}")
+                
+                if not saved:
+                    error_msg = (
+                        f"Failed to save audio file using all available methods.\n"
+                        f"  Tensor shape: {audio_tensor.shape}\n"
+                        f"  Tensor dtype: {audio_tensor.dtype}\n"
+                        f"  Sample rate: {sample_rate}\n"
+                        f"  Audio stats: min={audio_tensor.min():.3f}, max={audio_tensor.max():.3f}, mean={audio_tensor.mean():.3f}\n"
+                        f"  Path: {audio_path}\n"
+                        f"  Last error: {last_error}"
+                    )
+                    logger.error(error_msg)
+                    raise RuntimeError(error_msg)
                 
                 return audio_path
         
