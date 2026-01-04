@@ -1,4 +1,24 @@
-manim
-numpy
-opencv-python
+# Core dependencies
+manim>=0.17.0,<0.18.0
+numpy>=1.24.0,<2.0.0
+opencv-python>=4.8.0,<5.0.0
+
+# Audio processing
+faster-whisper>=0.9.0,<1.0.0
+pydub>=0.25.0
+torchaudio>=2.0.0
+
+# Data processing
+matplotlib>=3.7.0,<4.0.0
+pandas>=2.0.0,<3.0.0
+scipy>=1.10.0,<2.0.0
+networkx>=3.0,<4.0
+
+# Manim extensions
+manim-play-timeline>=0.1.0
+manim-voiceover>=0.1.0
+manimvtk>=0.1.0
+
+# LLM integration (optional)
+openai>=1.0.0,<2.0.0
 
