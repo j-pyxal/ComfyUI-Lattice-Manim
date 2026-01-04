@@ -58,10 +58,8 @@ def create_word_by_word_animation(words, position, font_config, color_config):
     
     code = f"""
 # Word-by-word caption animation
-caption_group = VGroup()
 current_text = Text("", font="{font}", font_size={font_size}, color={text_color})
-caption_group.add(current_text)
-caption_group.to_edge({pos}, buff=0.5)
+current_text.to_edge({pos}, buff=0.5)
 
 # Background rectangle if needed
 """
@@ -85,6 +83,7 @@ self.add(caption_group)
 # Animate words
 """
     
+    # Generate code for each word
     for i, word_data in enumerate(words):
         word = word_data['word']
         start = word_data['start']
@@ -92,22 +91,18 @@ self.add(caption_group)
         duration = end - start
         
         # Clean word (remove punctuation for display)
-        clean_word = word.strip()
+        clean_word = word.strip().replace('"', '\\"')  # Escape quotes
         if not clean_word:
             continue
         
+        # Build full sentence up to current word for display
+        words_so_far = ' '.join([w['word'].strip() for w in words[:i+1]])
+        words_so_far = words_so_far.replace('"', '\\"')
+        
         code += f"""
 # Word {i}: "{clean_word}" ({start:.2f}s - {end:.2f}s)
-word_text = Text("{clean_word}", font="{font}", font_size={font_size}, color={text_color})
-if i > 0:
-    word_text.next_to(current_text, RIGHT, buff=0.1)
-else:
-    word_text.move_to(caption_group.get_center())
-
-# Highlight current word
-highlight = word_text.copy()
-highlight.set_color(YELLOW)
-highlight.scale(1.2)
+word_text = Text("{words_so_far}", font="{font}", font_size={font_size}, color={text_color})
+word_text.to_edge({pos}, buff=0.5)
 
 self.play(
     Transform(current_text, word_text),
