@@ -60,7 +60,31 @@ def extract_frames_from_video(video_path: str, max_frames: Optional[int] = None)
     estimated_memory_gb = total_frames * height * width * 3 * 4 / (1024**3)
     logger.info(f"Extracting {total_frames} frames ({width}x{height}) - estimated memory: {estimated_memory_gb:.2f} GB")
     
+    # Additional safety: if single frame allocation would be too large, downscale resolution
+    single_frame_mb = height * width * 3 * 4 / (1024**2)
+    max_single_frame_mb = 50  # If a single frame is > 50MB, downscale
+    
+    original_width = width
+    original_height = height
+    
+    if single_frame_mb > max_single_frame_mb:
+        # Calculate downscale factor to get under limit
+        scale_factor = (max_single_frame_mb / single_frame_mb) ** 0.5
+        width = int(width * scale_factor)
+        height = int(height * scale_factor)
+        logger.warning(f"High resolution ({original_width}x{original_height}, {single_frame_mb:.1f} MB/frame) detected. Downscaling to {width}x{height} to prevent memory issues.")
+        single_frame_mb = height * width * 3 * 4 / (1024**2)
+    
     # Safety limit: warn and limit frames if output would be too large
+    # Also check if even the limited frames would be too much
+    max_safe_memory_gb = 2.0  # Absolute maximum we'll try to allocate
+    estimated_limited_gb = max_frames * height * width * 3 * 4 / (1024**3)
+    
+    if estimated_limited_gb > max_safe_memory_gb:
+        # Reduce frame count further if needed
+        max_frames = int(max_safe_memory_gb * (1024**3) / (height * width * 3 * 4))
+        logger.warning(f"Even {max_frames} frames would require {estimated_limited_gb:.2f} GB. Further limiting to {max_frames} frames.")
+    
     if total_frames > max_frames:
         logger.warning(f"Video has {total_frames} frames, which would require {estimated_memory_gb:.2f} GB. Limiting to {max_frames} frames to prevent memory issues.")
         logger.warning(f"Consider using frame sampling or splitting long videos into segments.")
@@ -71,8 +95,18 @@ def extract_frames_from_video(video_path: str, max_frames: Optional[int] = None)
         frame_skip = 1.0
         target_frames = total_frames
     
+    # Final memory check before allocation
+    final_memory_gb = target_frames * height * width * 3 * 4 / (1024**3)
+    logger.info(f"Allocating {target_frames} frames at {width}x{height} - {final_memory_gb:.2f} GB")
+    
     # Pre-allocate tensor to avoid memory spikes from list + stack
-    image_tensor = torch.zeros((target_frames, height, width, 3), dtype=torch.float32)
+    try:
+        image_tensor = torch.zeros((target_frames, height, width, 3), dtype=torch.float32)
+    except RuntimeError as e:
+        cap.release()  # Make sure to release before raising
+        error_msg = f"Failed to allocate memory for {target_frames} frames at {width}x{height} ({final_memory_gb:.2f} GB). System may be out of memory."
+        logger.error(error_msg)
+        raise RuntimeError(error_msg) from e
     
     frame_idx = 0
     output_idx = 0
@@ -88,7 +122,7 @@ def extract_frames_from_video(video_path: str, max_frames: Optional[int] = None)
             # Convert BGR to RGB
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             
-            # Resize if downscaled
+            # Resize if downscaled (check against original dimensions)
             if frame_rgb.shape[1] != width or frame_rgb.shape[0] != height:
                 frame_rgb = cv2.resize(frame_rgb, (width, height), interpolation=cv2.INTER_AREA)
             
