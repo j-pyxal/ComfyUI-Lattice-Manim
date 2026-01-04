@@ -1,5 +1,9 @@
 import { app } from "../../scripts/app.js";
 
+// Video preview functionality (inspired by ComfyUI-VideoHelperSuite)
+// Note: ComfyUI's built-in preview system will handle IMAGE tensor previews
+// We can enhance it with video-specific controls
+
 app.registerExtension({
 	name: "Lattice.Manim",
 	async beforeRegisterNodeDef(nodeType, nodeData, app) {
@@ -134,117 +138,116 @@ app.registerExtension({
 				const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;
 				
 				// Increase node size to prevent cut-off
-				this.setSize([800, 1000]);
+				this.setSize([800, 1100]);
 
 				// Make custom code editor collapsible and smaller
-				const codeWidget = this.widgets.find((w) => w.name === "custom_code");
-				if (codeWidget && codeWidget.inputEl) {
-					// Hide the original input
-					codeWidget.inputEl.style.display = "none";
-					
-					// Create collapsible section
-					const codeSection = document.createElement("div");
-					codeSection.style.cssText = "margin: 10px 0;";
-					
-					const toggleBtn = document.createElement("button");
-					toggleBtn.textContent = "▼ Custom Code (Advanced)";
-					toggleBtn.style.cssText = `
-						width: 100%;
-						padding: 8px;
-						background: #444;
-						color: #aaa;
-						border: 1px solid #666;
-						border-radius: 4px;
-						cursor: pointer;
-						text-align: left;
-						font-size: 12px;
-					`;
-					
-					const codeEditor = document.createElement("textarea");
-					codeEditor.value = codeWidget.inputEl.value || "";
-					codeEditor.placeholder = "# Optional: Custom Manim code to override defaults";
-					Object.assign(codeEditor.style, {
-						fontFamily: "'Consolas', 'Monaco', 'Courier New', monospace",
-						fontSize: "12px",
-						backgroundColor: "#1e1e1e",
-						color: "#d4d4d4",
-						border: "1px solid #3c3c3c",
-						borderRadius: "4px",
-						padding: "8px",
-						lineHeight: "1.5",
-						width: "100%",
-						height: "150px",
-						marginTop: "5px",
-						resize: "vertical",
-						whiteSpace: "pre",
-						display: "none"
-					});
-					
-					codeEditor.addEventListener("input", (e) => {
-						codeWidget.inputEl.value = e.target.value;
-						codeWidget.inputEl.dispatchEvent(new Event("input", { bubbles: true }));
-					});
-					
-					let isExpanded = false;
-					toggleBtn.onclick = () => {
-						isExpanded = !isExpanded;
-						codeEditor.style.display = isExpanded ? "block" : "none";
-						toggleBtn.textContent = isExpanded ? "▲ Hide Custom Code" : "▼ Custom Code (Advanced)";
-					};
-					
-					codeSection.appendChild(toggleBtn);
-					codeSection.appendChild(codeEditor);
-					
-					// Insert before the hidden input
-					if (codeWidget.inputEl.parentNode) {
-						codeWidget.inputEl.parentNode.insertBefore(codeSection, codeWidget.inputEl);
+				setTimeout(() => {
+					const codeWidget = this.widgets.find((w) => w.name === "custom_code");
+					if (codeWidget && codeWidget.inputEl) {
+						// Hide the original input
+						const originalInput = codeWidget.inputEl;
+						originalInput.style.display = "none";
+						
+						// Create collapsible section
+						const codeSection = document.createElement("div");
+						codeSection.style.cssText = "margin: 10px 0;";
+						
+						const toggleBtn = document.createElement("button");
+						toggleBtn.textContent = "▼ Custom Code (Advanced)";
+						toggleBtn.style.cssText = `
+							width: 100%;
+							padding: 8px;
+							background: #444;
+							color: #aaa;
+							border: 1px solid #666;
+							border-radius: 4px;
+							cursor: pointer;
+							text-align: left;
+							font-size: 12px;
+						`;
+						
+						const codeEditor = document.createElement("textarea");
+						codeEditor.value = originalInput.value || "";
+						codeEditor.placeholder = "# Optional: Custom Manim code to override defaults";
+						Object.assign(codeEditor.style, {
+							fontFamily: "'Consolas', 'Monaco', 'Courier New', monospace",
+							fontSize: "12px",
+							backgroundColor: "#1e1e1e",
+							color: "#d4d4d4",
+							border: "1px solid #3c3c3c",
+							borderRadius: "4px",
+							padding: "8px",
+							lineHeight: "1.5",
+							width: "100%",
+							height: "150px",
+							marginTop: "5px",
+							resize: "vertical",
+							whiteSpace: "pre",
+							display: "none"
+						});
+						
+						codeEditor.addEventListener("input", (e) => {
+							originalInput.value = e.target.value;
+							originalInput.dispatchEvent(new Event("input", { bubbles: true }));
+						});
+						
+						let isExpanded = false;
+						toggleBtn.onclick = () => {
+							isExpanded = !isExpanded;
+							codeEditor.style.display = isExpanded ? "block" : "none";
+							toggleBtn.textContent = isExpanded ? "▲ Hide Custom Code" : "▼ Custom Code (Advanced)";
+						};
+						
+						codeSection.appendChild(toggleBtn);
+						codeSection.appendChild(codeEditor);
+						
+						// Insert before the hidden input
+						if (originalInput.parentNode) {
+							originalInput.parentNode.insertBefore(codeSection, originalInput);
+						}
 					}
-				}
-				
-				// Add file upload helper for data input
-				this.addDataFileUpload();
+					
+					// Add file upload helper for data input
+					this.addDataFileUpload();
+				}, 100);
 				
 				return r;
 			};
 			
 			// Add file upload helper
 			nodeType.prototype.addDataFileUpload = function() {
-				// Find data widget (it's a generic input)
-				// We'll add a helper section above it
-				setTimeout(() => {
-					const widgets = this.widgets || [];
-					// Look for the first widget which should be "data"
-					if (widgets.length > 0) {
-						const dataWidget = widgets[0];
-						if (dataWidget && dataWidget.inputEl && dataWidget.inputEl.parentNode) {
-							const uploadSection = document.createElement("div");
-							uploadSection.style.cssText = `
-								margin: 10px 0;
-								padding: 10px;
-								background: #2a2a2a;
-								border-radius: 4px;
-								border: 1px dashed #555;
-							`;
-							
-							const label = document.createElement("div");
-							label.textContent = "Data Input:";
-							label.style.cssText = "color: #aaa; font-size: 11px; margin-bottom: 5px; text-transform: uppercase;";
-							
-							const helpText = document.createElement("div");
-							helpText.innerHTML = `
-								<span style="color: #888; font-size: 11px;">
-									Connect a data node, or enter file path (CSV/JSON).<br>
-									Supports: CSV, JSON, NumPy arrays, Pandas DataFrames
-								</span>
-							`;
-							
-							uploadSection.appendChild(label);
-							uploadSection.appendChild(helpText);
-							
-							dataWidget.inputEl.parentNode.insertBefore(uploadSection, dataWidget.inputEl);
-						}
+				const widgets = this.widgets || [];
+				// Look for the first widget which should be "data"
+				if (widgets.length > 0) {
+					const dataWidget = widgets[0];
+					if (dataWidget && dataWidget.inputEl && dataWidget.inputEl.parentNode) {
+						const uploadSection = document.createElement("div");
+						uploadSection.style.cssText = `
+							margin: 10px 0;
+							padding: 10px;
+							background: #2a2a2a;
+							border-radius: 4px;
+							border: 1px dashed #555;
+						`;
+						
+						const label = document.createElement("div");
+						label.textContent = "Data Input:";
+						label.style.cssText = "color: #aaa; font-size: 11px; margin-bottom: 5px; text-transform: uppercase;";
+						
+						const helpText = document.createElement("div");
+						helpText.innerHTML = `
+							<span style="color: #888; font-size: 11px;">
+								Connect a data node, or enter file path (CSV/JSON).<br>
+								Supports: CSV, JSON, NumPy arrays, Pandas DataFrames
+							</span>
+						`;
+						
+						uploadSection.appendChild(label);
+						uploadSection.appendChild(helpText);
+						
+						dataWidget.inputEl.parentNode.insertBefore(uploadSection, dataWidget.inputEl);
 					}
-				}, 100);
+				}
 			};
 		}
 		
@@ -345,17 +348,61 @@ app.registerExtension({
 				header.appendChild(addSceneBtn);
 				timelineContainer.appendChild(header);
 				
-				// Timeline tracks area
-				const tracksArea = document.createElement("div");
-				tracksArea.className = "timeline-tracks";
-				tracksArea.style.cssText = `
-					max-height: 500px;
-					overflow-y: auto;
-					overflow-x: hidden;
-					padding: 8px;
+				// Create visual timeline with time ruler
+				const timelineVisual = document.createElement("div");
+				timelineVisual.className = "timeline-visual";
+				timelineVisual.style.cssText = `
+					width: 100%;
+					height: 220px;
 					background: #1a1a1a;
 					border-radius: 6px;
 					border: 1px solid #333;
+					position: relative;
+					margin-bottom: 15px;
+					overflow-x: auto;
+					overflow-y: hidden;
+				`;
+				
+				// Time ruler
+				const timeRuler = document.createElement("div");
+				timeRuler.className = "time-ruler";
+				timeRuler.style.cssText = `
+					height: 30px;
+					background: #252525;
+					border-bottom: 1px solid #444;
+					position: relative;
+					white-space: nowrap;
+					min-width: 100%;
+				`;
+				
+				// Add time markers (0-60 seconds)
+				for (let i = 0; i <= 60; i += 5) {
+					const marker = document.createElement("div");
+					marker.style.cssText = `
+						position: absolute;
+						left: ${(i / 60) * 100}%;
+						height: 100%;
+						border-left: 1px solid ${i % 10 === 0 ? '#666' : '#444'};
+						padding-left: 4px;
+						font-size: 10px;
+						color: #888;
+						line-height: 30px;
+					`;
+					marker.textContent = i + 's';
+					timeRuler.appendChild(marker);
+				}
+				
+				timelineVisual.appendChild(timeRuler);
+				
+				// Timeline tracks area (for scene bars)
+				const tracksArea = document.createElement("div");
+				tracksArea.className = "timeline-tracks";
+				tracksArea.style.cssText = `
+					height: 190px;
+					overflow-y: auto;
+					overflow-x: hidden;
+					padding: 8px;
+					position: relative;
 				`;
 				
 				// Custom scrollbar styling (only add once)
@@ -446,79 +493,117 @@ app.registerExtension({
 			
 			// Render a scene as a timeline layer
 			nodeType.prototype.renderSceneLayer = function(scene, index) {
+				// Create visual timeline bar FIRST
+				if (this.tracksArea) {
+					const visualBar = document.createElement("div");
+					visualBar.className = "timeline-visual-bar";
+					visualBar.dataset.sceneId = scene.id;
+					const duration = this.getTimelineDuration();
+					const leftPercent = duration > 0 ? (scene.start_time / duration) * 100 : 0;
+					const widthPercent = duration > 0 ? ((scene.end_time - scene.start_time) / duration) * 100 : 10;
+					
+					visualBar.style.cssText = `
+						position: absolute;
+						left: ${leftPercent}%;
+						width: ${widthPercent}%;
+						top: ${index * 50}px;
+						height: 40px;
+						background: linear-gradient(135deg, #0074D9 0%, #0056b3 100%);
+						border-radius: 4px;
+						border: 1px solid #0056b3;
+						cursor: move;
+						display: flex;
+						align-items: center;
+						justify-content: center;
+						color: white;
+						font-size: 11px;
+						font-weight: 500;
+						box-shadow: 0 2px 4px rgba(0,116,217,0.3);
+						transition: all 0.2s;
+					`;
+					visualBar.textContent = `Scene ${scene.id}`;
+					visualBar.title = `${scene.start_time.toFixed(2)}s - ${scene.end_time.toFixed(2)}s`;
+					
+					visualBar.onmouseenter = () => {
+						visualBar.style.transform = "scaleY(1.1)";
+						visualBar.style.boxShadow = "0 4px 8px rgba(0,116,217,0.5)";
+					};
+					visualBar.onmouseleave = () => {
+						visualBar.style.transform = "scaleY(1)";
+						visualBar.style.boxShadow = "0 2px 4px rgba(0,116,217,0.3)";
+					};
+					
+					// Make draggable
+					this.makeTimelineBarDraggable(visualBar, scene);
+					
+					this.tracksArea.appendChild(visualBar);
+				}
+				
+				// Create detail card (collapsible)
+				if (!this.detailsArea) {
+					this.detailsArea = document.createElement("div");
+					this.detailsArea.className = "timeline-details";
+					this.detailsArea.style.cssText = `
+						margin-top: 15px;
+						max-height: 400px;
+						overflow-y: auto;
+					`;
+					this.timelineContainer.appendChild(this.detailsArea);
+				}
+				
 				const layer = document.createElement("div");
 				layer.className = "timeline-layer";
 				layer.dataset.sceneId = scene.id;
 				layer.style.cssText = `
 					margin: 10px 0;
-					padding: 15px;
+					padding: 12px;
 					background: linear-gradient(135deg, #2d2d2d 0%, #252525 100%);
-					border-radius: 8px;
-					border-left: 4px solid #0074D9;
+					border-radius: 6px;
+					border-left: 3px solid #0074D9;
 					border: 1px solid #444;
-					box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-					transition: all 0.2s;
+					box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 				`;
 				
-				layer.onmouseenter = () => {
-					layer.style.borderColor = "#0074D9";
-					layer.style.boxShadow = "0 4px 12px rgba(0,116,217,0.3)";
-				};
-				layer.onmouseleave = () => {
-					layer.style.borderColor = "#444";
-					layer.style.boxShadow = "0 2px 6px rgba(0,0,0,0.2)";
-				};
-				
-				// Layer header with better design
+				// Collapsible header
 				const layerHeader = document.createElement("div");
 				layerHeader.style.cssText = `
 					display: flex;
 					justify-content: space-between;
 					align-items: center;
-					margin-bottom: 12px;
-					padding-bottom: 10px;
-					border-bottom: 1px solid #444;
+					cursor: pointer;
+					padding: 5px;
+					margin: -5px -5px 5px -5px;
+					border-radius: 4px;
 				`;
+				layerHeader.onmouseenter = () => layerHeader.style.background = "#333";
+				layerHeader.onmouseleave = () => layerHeader.style.background = "transparent";
 				
 				const layerTitle = document.createElement("div");
 				const duration = (scene.end_time - scene.start_time).toFixed(2);
 				layerTitle.innerHTML = `
-					<span style="color: #0074D9; font-weight: 600; font-size: 14px;">Scene ${scene.id}</span>
-					<span style="color: #888; font-size: 12px; margin-left: 8px;">${scene.start_time.toFixed(2)}s - ${scene.end_time.toFixed(2)}s (${duration}s)</span>
+					<span style="color: #0074D9; font-weight: 600;">Scene ${scene.id}</span>
+					<span style="color: #888; font-size: 11px; margin-left: 8px;">${scene.start_time.toFixed(2)}s - ${scene.end_time.toFixed(2)}s</span>
 				`;
 				
-				const deleteBtn = document.createElement("button");
-				deleteBtn.innerHTML = "×";
-				deleteBtn.style.cssText = `
-					background: #dc3545;
-					color: white;
-					border: none;
-					border-radius: 4px;
-					width: 28px;
-					height: 28px;
-					cursor: pointer;
-					font-size: 18px;
-					line-height: 1;
-					transition: all 0.2s;
-					font-weight: bold;
-				`;
-				deleteBtn.onmouseenter = () => {
-					deleteBtn.style.background = "#c82333";
-					deleteBtn.style.transform = "scale(1.1)";
-				};
-				deleteBtn.onmouseleave = () => {
-					deleteBtn.style.background = "#dc3545";
-					deleteBtn.style.transform = "scale(1)";
-				};
-				deleteBtn.onclick = () => {
-					if (confirm(`Delete Scene ${scene.id}?`)) {
-						this.deleteScene(scene.id);
-					}
-				};
+				const expandBtn = document.createElement("span");
+				expandBtn.textContent = "▼";
+				expandBtn.style.cssText = "color: #888; font-size: 10px;";
 				
 				layerHeader.appendChild(layerTitle);
-				layerHeader.appendChild(deleteBtn);
+				layerHeader.appendChild(expandBtn);
+				
+				const layerContent = document.createElement("div");
+				layerContent.style.cssText = "display: none;";
+				
+				let isExpanded = false;
+				layerHeader.onclick = () => {
+					isExpanded = !isExpanded;
+					layerContent.style.display = isExpanded ? "block" : "none";
+					expandBtn.textContent = isExpanded ? "▲" : "▼";
+				};
+				
 				layer.appendChild(layerHeader);
+				layer.appendChild(layerContent);
 				
 				// Time controls (in/out points) with better layout
 				const timeControls = document.createElement("div");
