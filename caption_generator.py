@@ -78,7 +78,8 @@ self.add(bg_rect)
 """
     
     code += """
-self.add(caption_group)
+# Add initial text to scene
+self.add(current_text)
 
 # Animate words
 """
