@@ -208,8 +208,10 @@ self.add(bg_rect)
 # Add caption text to scene
 self.add(caption_text)
 
-# Animate sentences
+# Animate sentences - synchronized to absolute audio time
 """
+    
+    code += "current_time = 0.0\n\n"
     
     for i, sentence_words in enumerate(sentences):
         if not sentence_words:
@@ -226,6 +228,12 @@ self.add(caption_text)
         
         code += f"""
 # Sentence {i}: "{sentence_text[:50]}..." ({start_time:.2f}s - {end_time:.2f}s)
+# Wait until sentence start time (absolute sync with audio)
+if current_time < {start_time:.3f}:
+    self.wait({start_time:.3f} - current_time)
+    current_time = {start_time:.3f}
+
+# Update caption text
 sentence_obj = Text("{sentence_text_escaped}", font="{font}", font_size={font_size}, color={text_color})
 sentence_obj.to_edge({pos}, buff=0.5)
 
@@ -235,7 +243,7 @@ self.play(
     run_time={duration:.3f}
 )
 caption_text = sentence_obj
-self.wait(0.1)
+current_time = {end_time:.3f}
 """
     
     return code
