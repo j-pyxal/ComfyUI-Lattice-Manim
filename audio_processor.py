@@ -154,6 +154,43 @@ def check_disk_space_for_model(model_size: str, cache_dir: Optional[str] = None)
     return True, ""
 
 
+def _find_available_temp_dir(required_mb: float = 10.0) -> str:
+    """
+    Find a temporary directory with enough space.
+    
+    Args:
+        required_mb: Required space in MB
+    
+    Returns:
+        Path to temp directory with space
+    """
+    # Try default temp directory first
+    default_temp = tempfile.gettempdir()
+    available = get_available_disk_space(default_temp)
+    
+    if available >= required_mb:
+        return default_temp
+    
+    # Try alternative locations
+    alternatives = [
+        os.path.join(os.path.expanduser("~"), "AppData", "Local", "Temp"),  # Windows user temp
+        os.path.join(os.path.expanduser("~"), ".tmp"),  # User home .tmp
+        "/tmp",  # Unix temp
+        "C:\\temp",  # Windows C:\temp
+    ]
+    
+    for alt_dir in alternatives:
+        if os.path.exists(alt_dir) or os.path.exists(os.path.dirname(alt_dir)):
+            available = get_available_disk_space(alt_dir)
+            if available >= required_mb:
+                logger.info(f"Using alternative temp directory: {alt_dir} (has {available:.0f} MB free)")
+                return alt_dir
+    
+    # If all else fails, return default and let it fail with a clear error
+    logger.warning(f"Default temp directory has only {available:.0f} MB free, need {required_mb:.0f} MB")
+    return default_temp
+
+
 def process_audio_input(audio_input, temp_dir):
     """
     Extract audio from file path, AUDIO tensor, or ComfyUI AUDIO dict, save to temp file.
@@ -165,6 +202,24 @@ def process_audio_input(audio_input, temp_dir):
     Returns:
         Path to audio file
     """
+    # Check if temp_dir has space, find alternative if needed
+    # Audio file will be ~5-10 MB for a minute of audio
+    required_mb = 20.0  # Buffer for safety
+    available = get_available_disk_space(temp_dir)
+    
+    if available >= 0 and available < required_mb:
+        logger.warning(f"Temp directory has only {available:.0f} MB free. Looking for alternative...")
+        temp_dir = _find_available_temp_dir(required_mb)
+        available = get_available_disk_space(temp_dir)
+        if available >= 0 and available < required_mb:
+            raise RuntimeError(
+                f"Insufficient disk space to save audio file.\n"
+                f"  Required: ~{required_mb:.0f} MB\n"
+                f"  Available: {available:.0f} MB\n"
+                f"  Temp directory: {temp_dir}\n"
+                f"Please free up disk space or set TMPDIR/TMP environment variable to a drive with more space."
+            )
+    
     audio_path = os.path.join(temp_dir, "audio_input.wav")
     
     # Handle None
@@ -278,6 +333,7 @@ def process_audio_input(audio_input, temp_dir):
                         
                         # Ensure path is normalized (Windows compatibility)
                         audio_path_normalized = os.path.normpath(audio_path)
+                        # Write file (soundfile.write handles file closing automatically)
                         sf.write(audio_path_normalized, audio_np, int(sample_rate), subtype='PCM_16')
                         saved = True
                         logger.debug("Audio saved successfully using soundfile directly")
@@ -318,9 +374,23 @@ def process_audio_input(audio_input, temp_dir):
                                 sample_width=2
                             )
                         
-                        audio_segment.export(audio_path, format="wav")
-                        saved = True
-                        logger.debug("Audio saved successfully using pydub")
+                        # Use a temporary file first, then move to avoid file locks
+                        temp_audio_path = audio_path + ".tmp"
+                        try:
+                            audio_segment.export(temp_audio_path, format="wav")
+                            # Move to final location (atomic on most systems)
+                            if os.path.exists(audio_path):
+                                os.remove(audio_path)
+                            os.rename(temp_audio_path, audio_path)
+                            saved = True
+                            logger.debug("Audio saved successfully using pydub")
+                        finally:
+                            # Clean up temp file if it still exists
+                            if os.path.exists(temp_audio_path):
+                                try:
+                                    os.remove(temp_audio_path)
+                                except:
+                                    pass
                     except Exception as e:
                         last_error = e
                         logger.warning(f"pydub export failed: {e}")
