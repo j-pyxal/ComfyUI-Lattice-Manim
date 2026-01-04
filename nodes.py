@@ -29,6 +29,67 @@ except ImportError:
 MAX_FRAMES_SAFE = 2000
 
 
+def save_video_and_get_preview(video_path: str) -> Tuple[torch.Tensor, torch.Tensor, str]:
+    """
+    Save video to output directory and return preview frame.
+    This is much more memory-efficient than loading all frames.
+    
+    Args:
+        video_path: Path to video file
+    
+    Returns:
+        Tuple of (preview_frame_tensor, mask_tensor, saved_video_path)
+    """
+    import shutil
+    import time
+    
+    # Get video properties
+    cap = cv2.VideoCapture(video_path)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    # Read first frame for preview
+    ret, first_frame = cap.read()
+    cap.release()
+    
+    if not ret:
+        raise RuntimeError("Failed to read first frame from video")
+    
+    # Convert first frame to tensor (just for preview)
+    frame_rgb = cv2.cvtColor(first_frame, cv2.COLOR_BGR2RGB)
+    frame_normalized = torch.from_numpy(frame_rgb.astype(np.float32) / 255.0)
+    # Add batch dimension: [1, H, W, C]
+    preview_tensor = frame_normalized.unsqueeze(0)
+    
+    # Create mask for single frame
+    h, w, _ = preview_tensor.shape[1:]
+    mask_tensor = torch.ones((1, h, w), dtype=torch.float32)
+    
+    # Save video to a permanent location (outside temp directory)
+    # Try to find ComfyUI output directory
+    try:
+        # Look for ComfyUI root (go up from custom_nodes)
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        comfyui_root = os.path.dirname(os.path.dirname(current_dir))
+        output_dir = os.path.join(comfyui_root, "output")
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
+    except:
+        # Fallback: use same directory as video
+        output_dir = os.path.dirname(os.path.abspath(video_path))
+    
+    # Copy video with unique name
+    timestamp = int(time.time() * 1000)
+    output_filename = f"manim_output_{timestamp}.mp4"
+    saved_video_path = os.path.join(output_dir, output_filename)
+    
+    shutil.copy2(video_path, saved_video_path)
+    logger.info(f"Video saved to: {saved_video_path} ({total_frames} frames, {width}x{height})")
+    
+    return preview_tensor, mask_tensor, saved_video_path
+
+
 def extract_frames_from_video(video_path: str, max_frames: Optional[int] = None) -> Tuple[torch.Tensor, int, int]:
     """
     Extract frames from video file with automatic frame limiting to prevent memory issues.
@@ -251,12 +312,50 @@ config.frame_rate = 30
                 logger.debug(f"Manim stdout: {result.stdout}")
                 raise RuntimeError(f"Manim rendering failed. Output file not found.\nLogs:\n{error_msg}")
             
-            # Extract frames using helper function (with automatic frame limiting)
-            image_tensor, width, height = extract_frames_from_video(output_mp4)
+            # Instead of loading all frames into memory, copy video to output directory
+            # This is much more memory-efficient for long videos
+            import shutil
+            from pathlib import Path
             
-            # Create corresponding Mask Tensor: [Batch, Height, Width] (all ones)
-            batch_size, h, w, _ = image_tensor.shape
-            mask_tensor = torch.ones((batch_size, h, w), dtype=torch.float32)
+            # Get ComfyUI output directory (or use temp if not available)
+            try:
+                # Try to get ComfyUI's output directory
+                output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "output")
+                if not os.path.exists(output_dir):
+                    output_dir = temp_dir
+            except:
+                output_dir = temp_dir
+            
+            # Copy video to output directory with unique name
+            import time
+            timestamp = int(time.time() * 1000)
+            output_filename = f"manim_output_{timestamp}.mp4"
+            output_video_path = os.path.join(output_dir, output_filename)
+            
+            # Copy the video file
+            shutil.copy2(output_mp4, output_video_path)
+            logger.info(f"Video saved to: {output_video_path}")
+            
+            # For ComfyUI compatibility, we still need to return IMAGE tensor
+            # But we'll only load a preview frame (first frame) to keep memory usage low
+            cap = cv2.VideoCapture(output_mp4)
+            ret, first_frame = cap.read()
+            cap.release()
+            
+            if not ret:
+                raise RuntimeError("Failed to read first frame from video")
+            
+            # Convert first frame to tensor (just for preview)
+            frame_rgb = cv2.cvtColor(first_frame, cv2.COLOR_BGR2RGB)
+            frame_normalized = torch.from_numpy(frame_rgb.astype(np.float32) / 255.0)
+            # Add batch dimension: [1, H, W, C]
+            image_tensor = frame_normalized.unsqueeze(0)
+            
+            # Create mask for single frame
+            h, w, _ = image_tensor.shape[1:]
+            mask_tensor = torch.ones((1, h, w), dtype=torch.float32)
+            
+            logger.info(f"Returning video file path: {output_video_path} (preview frame only in tensor)")
             
             return (image_tensor, mask_tensor)
 
