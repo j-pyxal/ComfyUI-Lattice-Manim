@@ -447,7 +447,13 @@ app.registerExtension({
 				this.timeRuler = timeRuler;
 				
 				// Insert timeline container BEFORE the JSON input
-				widgetParent.insertBefore(timelineContainer, jsonInput);
+				// Make sure it doesn't block other widgets
+				const nextSibling = jsonInput.nextSibling;
+				if (nextSibling) {
+					widgetParent.insertBefore(timelineContainer, nextSibling);
+				} else {
+					widgetParent.insertBefore(timelineContainer, jsonInput);
+				}
 				
 				// Add toggle button for advanced JSON editing AFTER timeline
 				const jsonToggle = document.createElement("button");
