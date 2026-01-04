@@ -563,8 +563,8 @@ class ManimAudioCaptionNode:
                 logger.debug(f"Manim stdout: {result.stdout}")
                 raise RuntimeError(f"Manim rendering failed. Output file not found.\nLogs:\n{error_msg}")
             
-            # Save video and get preview frame (memory-efficient approach)
-            preview_tensor, mask_tensor, saved_video_path = save_video_and_get_preview(output_mp4)
+            # Save PNG frames and get preview
+            preview_tensor, mask_tensor = save_manim_frames(temp_dir)
             
             return (preview_tensor, mask_tensor)
 
@@ -789,8 +789,8 @@ class DataVisualization(Scene):
                 logger.debug(f"Manim stdout: {result.stdout}")
                 raise RuntimeError(f"Manim rendering failed. Output file not found.\nLogs:\n{error_msg}")
             
-            # Save video and get preview frame (memory-efficient approach)
-            preview_tensor, mask_tensor, saved_video_path = save_video_and_get_preview(output_mp4)
+            # Save PNG frames and get preview
+            preview_tensor, mask_tensor = save_manim_frames(temp_dir)
             
             return (preview_tensor, mask_tensor)
 
@@ -1052,8 +1052,8 @@ config.frame_rate = {frame_rate}
                 logger.debug(f"Manim stdout: {result.stdout}")
                 raise RuntimeError(f"Manim rendering failed. Output file not found.\nLogs:\n{error_msg}")
             
-            # Save video and get preview frame (memory-efficient approach)
-            preview_tensor, mask_tensor, saved_video_path = save_video_and_get_preview(output_mp4)
+            # Save PNG frames and get preview
+            preview_tensor, mask_tensor = save_manim_frames(temp_dir)
             
             # Return updated timeline JSON
             updated_timeline_json = timeline_manager.to_json()
