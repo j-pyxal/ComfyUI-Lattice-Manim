@@ -24,8 +24,9 @@ except ImportError:
     logger = logging.getLogger(__name__)
 
 # Maximum safe number of frames to return (prevents memory issues)
-# ~67 seconds at 30fps, ~2.5 GB at 1920x1080
-MAX_FRAMES_SAFE = 2000
+# Conservative limit: ~33 seconds at 30fps, ~1.2 GB at 1920x1080
+# For systems with limited RAM, this prevents allocation failures
+MAX_FRAMES_SAFE = 1000
 
 
 def extract_frames_from_video(video_path: str, max_frames: Optional[int] = None) -> Tuple[torch.Tensor, int, int]:
@@ -84,8 +85,14 @@ def extract_frames_from_video(video_path: str, max_frames: Optional[int] = None)
         
         # Sample frames if needed
         if frame_idx >= next_frame_to_keep:
-            # Convert BGR to RGB and normalize in one step
+            # Convert BGR to RGB
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            
+            # Resize if downscaled
+            if frame_rgb.shape[1] != width or frame_rgb.shape[0] != height:
+                frame_rgb = cv2.resize(frame_rgb, (width, height), interpolation=cv2.INTER_AREA)
+            
+            # Normalize in one step
             frame_normalized = torch.from_numpy(frame_rgb.astype(np.float32) / 255.0)
             
             # Write directly to pre-allocated tensor
@@ -103,6 +110,8 @@ def extract_frames_from_video(video_path: str, max_frames: Optional[int] = None)
         if frame_idx % 100 == 0:
             logger.debug(f"Processed {frame_idx}/{total_frames} frames, extracted {output_idx}/{target_frames}...")
     
+    # IMPORTANT: Release video capture BEFORE any other operations
+    # This prevents file lock issues on Windows
     cap.release()
     
     # Trim to actual extracted frame count
