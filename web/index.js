@@ -133,29 +133,118 @@ app.registerExtension({
 			nodeType.prototype.onNodeCreated = function () {
 				const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;
 				
-				this.setSize([700, 600]);
+				// Increase node size to prevent cut-off
+				this.setSize([800, 1000]);
 
-				// Style custom code editor
+				// Make custom code editor collapsible and smaller
 				const codeWidget = this.widgets.find((w) => w.name === "custom_code");
 				if (codeWidget && codeWidget.inputEl) {
-					Object.assign(codeWidget.inputEl.style, {
+					// Hide the original input
+					codeWidget.inputEl.style.display = "none";
+					
+					// Create collapsible section
+					const codeSection = document.createElement("div");
+					codeSection.style.cssText = "margin: 10px 0;";
+					
+					const toggleBtn = document.createElement("button");
+					toggleBtn.textContent = "▼ Custom Code (Advanced)";
+					toggleBtn.style.cssText = `
+						width: 100%;
+						padding: 8px;
+						background: #444;
+						color: #aaa;
+						border: 1px solid #666;
+						border-radius: 4px;
+						cursor: pointer;
+						text-align: left;
+						font-size: 12px;
+					`;
+					
+					const codeEditor = document.createElement("textarea");
+					codeEditor.value = codeWidget.inputEl.value || "";
+					codeEditor.placeholder = "# Optional: Custom Manim code to override defaults";
+					Object.assign(codeEditor.style, {
 						fontFamily: "'Consolas', 'Monaco', 'Courier New', monospace",
-						fontSize: "14px",
+						fontSize: "12px",
 						backgroundColor: "#1e1e1e",
 						color: "#d4d4d4",
 						border: "1px solid #3c3c3c",
 						borderRadius: "4px",
-						padding: "10px",
+						padding: "8px",
 						lineHeight: "1.5",
 						width: "100%",
-						height: "300px",
+						height: "150px",
+						marginTop: "5px",
 						resize: "vertical",
-						whiteSpace: "pre"
+						whiteSpace: "pre",
+						display: "none"
 					});
-					codeWidget.type = "customtext";
+					
+					codeEditor.addEventListener("input", (e) => {
+						codeWidget.inputEl.value = e.target.value;
+						codeWidget.inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+					});
+					
+					let isExpanded = false;
+					toggleBtn.onclick = () => {
+						isExpanded = !isExpanded;
+						codeEditor.style.display = isExpanded ? "block" : "none";
+						toggleBtn.textContent = isExpanded ? "▲ Hide Custom Code" : "▼ Custom Code (Advanced)";
+					};
+					
+					codeSection.appendChild(toggleBtn);
+					codeSection.appendChild(codeEditor);
+					
+					// Insert before the hidden input
+					if (codeWidget.inputEl.parentNode) {
+						codeWidget.inputEl.parentNode.insertBefore(codeSection, codeWidget.inputEl);
+					}
 				}
 				
+				// Add file upload helper for data input
+				this.addDataFileUpload();
+				
 				return r;
+			};
+			
+			// Add file upload helper
+			nodeType.prototype.addDataFileUpload = function() {
+				// Find data widget (it's a generic input)
+				// We'll add a helper section above it
+				setTimeout(() => {
+					const widgets = this.widgets || [];
+					// Look for the first widget which should be "data"
+					if (widgets.length > 0) {
+						const dataWidget = widgets[0];
+						if (dataWidget && dataWidget.inputEl && dataWidget.inputEl.parentNode) {
+							const uploadSection = document.createElement("div");
+							uploadSection.style.cssText = `
+								margin: 10px 0;
+								padding: 10px;
+								background: #2a2a2a;
+								border-radius: 4px;
+								border: 1px dashed #555;
+							`;
+							
+							const label = document.createElement("div");
+							label.textContent = "Data Input:";
+							label.style.cssText = "color: #aaa; font-size: 11px; margin-bottom: 5px; text-transform: uppercase;";
+							
+							const helpText = document.createElement("div");
+							helpText.innerHTML = `
+								<span style="color: #888; font-size: 11px;">
+									Connect a data node, or enter file path (CSV/JSON).<br>
+									Supports: CSV, JSON, NumPy arrays, Pandas DataFrames
+								</span>
+							`;
+							
+							uploadSection.appendChild(label);
+							uploadSection.appendChild(helpText);
+							
+							dataWidget.inputEl.parentNode.insertBefore(uploadSection, dataWidget.inputEl);
+						}
+					}
+				}, 100);
 			};
 		}
 		
@@ -165,7 +254,8 @@ app.registerExtension({
 			nodeType.prototype.onNodeCreated = function () {
 				const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;
 				
-				this.setSize([850, 750]);
+				// Increase size to prevent cut-off
+				this.setSize([1200, 900]);
 				
 				// Add timeline UI
 				setTimeout(() => {
@@ -291,11 +381,13 @@ app.registerExtension({
 					document.head.appendChild(style);
 				}
 				
-				timelineContainer.appendChild(tracksArea);
+				timelineVisual.appendChild(tracksArea);
+				timelineContainer.appendChild(timelineVisual);
 				
 				// Store references
 				this.timelineContainer = timelineContainer;
 				this.tracksArea = tracksArea;
+				this.timeRuler = timeRuler;
 				
 				// Insert timeline container BEFORE the JSON input
 				widgetParent.insertBefore(timelineContainer, jsonInput);
@@ -335,13 +427,18 @@ app.registerExtension({
 					const timeline = JSON.parse(jsonStr);
 					const scenes = timeline.scenes || [];
 					
-					// Clear tracks
+				// Clear tracks and details
+				if (this.tracksArea) {
 					this.tracksArea.innerHTML = "";
-					
-					// Render each scene as a layer
-					scenes.forEach((scene, index) => {
-						this.renderSceneLayer(scene, index);
-					});
+				}
+				if (this.detailsArea) {
+					this.detailsArea.innerHTML = "";
+				}
+				
+				// Render each scene as a visual bar and detail card
+				scenes.forEach((scene, index) => {
+					this.renderSceneLayer(scene, index);
+				});
 				} catch (e) {
 					console.error("Failed to load timeline:", e);
 				}
@@ -618,7 +715,316 @@ app.registerExtension({
 				codeSection.appendChild(codeEditor);
 				layer.appendChild(codeSection);
 				
-				this.tracksArea.appendChild(layer);
+				// Add collapsible header
+				const layerHeader = document.createElement("div");
+				layerHeader.style.cssText = `
+					display: flex;
+					justify-content: space-between;
+					align-items: center;
+					cursor: pointer;
+					padding: 5px;
+					margin: -5px -5px 5px -5px;
+					border-radius: 4px;
+				`;
+				layerHeader.onmouseenter = () => layerHeader.style.background = "#333";
+				layerHeader.onmouseleave = () => layerHeader.style.background = "transparent";
+				
+				const layerTitle = document.createElement("div");
+				layerTitle.innerHTML = `<span style="color: #0074D9; font-weight: 600;">Scene ${scene.id}</span> <span style="color: #888; font-size: 11px;">(${scene.start_time.toFixed(2)}s - ${scene.end_time.toFixed(2)}s)</span>`;
+				
+				const expandBtn = document.createElement("span");
+				expandBtn.textContent = "▼";
+				expandBtn.style.cssText = "color: #888; font-size: 10px;";
+				
+				layerHeader.appendChild(layerTitle);
+				layerHeader.appendChild(expandBtn);
+				
+				const layerContent = document.createElement("div");
+				layerContent.style.cssText = "display: none;";
+				
+				let isExpanded = false;
+				layerHeader.onclick = () => {
+					isExpanded = !isExpanded;
+					layerContent.style.display = isExpanded ? "block" : "none";
+					expandBtn.textContent = isExpanded ? "▲" : "▼";
+				};
+				
+				// Move all existing content to layerContent
+				while (layer.firstChild && layer.firstChild !== layerHeader) {
+					if (layer.firstChild !== layerHeader) {
+						layerContent.appendChild(layer.firstChild);
+					}
+				}
+				
+				layer.appendChild(layerHeader);
+				layer.appendChild(layerContent);
+				
+				// Add time controls to layerContent
+				const timeControls = document.createElement("div");
+				timeControls.style.cssText = `
+					display: grid;
+					grid-template-columns: 1fr 1fr;
+					gap: 12px;
+					margin-bottom: 12px;
+				`;
+				
+				const inGroup = document.createElement("div");
+				inGroup.style.cssText = "display: flex; flex-direction: column; gap: 4px;";
+				const inLabel = document.createElement("label");
+				inLabel.textContent = "In Point (seconds)";
+				inLabel.style.cssText = "color: #aaa; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;";
+				const inPoint = document.createElement("input");
+				inPoint.type = "number";
+				inPoint.value = scene.start_time;
+				inPoint.step = 0.1;
+				inPoint.min = 0;
+				inPoint.style.cssText = `
+					width: 100%;
+					padding: 8px;
+					background: #1a1a1a;
+					color: #fff;
+					border: 1px solid #555;
+					border-radius: 4px;
+					font-size: 13px;
+					transition: border-color 0.2s;
+				`;
+				inPoint.onfocus = () => inPoint.style.borderColor = "#0074D9";
+				inPoint.onblur = () => inPoint.style.borderColor = "#555";
+				inPoint.onchange = () => {
+					this.updateSceneTime(scene.id, "start", parseFloat(inPoint.value));
+					this.loadTimeline(); // Refresh visual
+				};
+				inGroup.appendChild(inLabel);
+				inGroup.appendChild(inPoint);
+				
+				const outGroup = document.createElement("div");
+				outGroup.style.cssText = "display: flex; flex-direction: column; gap: 4px;";
+				const outLabel = document.createElement("label");
+				outLabel.textContent = "Out Point (seconds)";
+				outLabel.style.cssText = "color: #aaa; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;";
+				const outPoint = document.createElement("input");
+				outPoint.type = "number";
+				outPoint.value = scene.end_time;
+				outPoint.step = 0.1;
+				outPoint.min = 0.1;
+				outPoint.style.cssText = inPoint.style.cssText;
+				outPoint.onfocus = () => outPoint.style.borderColor = "#0074D9";
+				outPoint.onblur = () => outPoint.style.borderColor = "#555";
+				outPoint.onchange = () => {
+					this.updateSceneTime(scene.id, "end", parseFloat(outPoint.value));
+					this.loadTimeline(); // Refresh visual
+				};
+				outGroup.appendChild(outLabel);
+				outGroup.appendChild(outPoint);
+				
+				timeControls.appendChild(inGroup);
+				timeControls.appendChild(outGroup);
+				layerContent.appendChild(timeControls);
+				
+				// Add prompt and code sections to layerContent
+				const promptSection = document.createElement("div");
+				promptSection.style.cssText = "margin-bottom: 12px;";
+				const promptLabel = document.createElement("label");
+				promptLabel.textContent = "Visual Prompt";
+				promptLabel.style.cssText = "display: block; color: #fff; margin-bottom: 6px; font-size: 12px; font-weight: 500;";
+				const promptInput = document.createElement("textarea");
+				promptInput.value = scene.prompt || "";
+				promptInput.placeholder = "Describe what you want to see (e.g., 'A blue circle rotating in the center')";
+				promptInput.style.cssText = `
+					width: 100%;
+					height: 60px;
+					padding: 8px;
+					background: #1a1a1a;
+					color: #fff;
+					border: 1px solid #555;
+					border-radius: 4px;
+					font-family: inherit;
+					font-size: 13px;
+					resize: vertical;
+				`;
+				promptInput.onchange = () => this.updateScenePrompt(scene.id, promptInput.value);
+				promptInput.oninput = () => this.updateScenePrompt(scene.id, promptInput.value);
+				promptSection.appendChild(promptLabel);
+				promptSection.appendChild(promptInput);
+				layerContent.appendChild(promptSection);
+				
+				const generateBtn = document.createElement("button");
+				generateBtn.innerHTML = "<span style='margin-right: 6px;'>⚡</span> Generate Code";
+				generateBtn.style.cssText = `
+					width: 100%;
+					margin-bottom: 12px;
+					padding: 8px;
+					background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+					color: white;
+					border: none;
+					border-radius: 6px;
+					cursor: pointer;
+					font-weight: 500;
+					font-size: 12px;
+				`;
+				generateBtn.onclick = () => {
+					generateBtn.textContent = "Generating...";
+					generateBtn.disabled = true;
+					setTimeout(() => {
+						this.generateSceneCode(scene.id, promptInput.value);
+						generateBtn.innerHTML = "<span style='margin-right: 6px;'>⚡</span> Generate Code";
+						generateBtn.disabled = false;
+					}, 100);
+				};
+				layerContent.appendChild(generateBtn);
+				
+				// Code editor section
+				const codeSection = document.createElement("div");
+				const codeToggle = document.createElement("button");
+				codeToggle.innerHTML = "<span style='margin-right: 6px;'>▼</span> Edit Code";
+				codeToggle.style.cssText = `
+					width: 100%;
+					padding: 8px;
+					background: #333;
+					color: #fff;
+					border: 1px solid #555;
+					border-radius: 6px;
+					cursor: pointer;
+					text-align: left;
+					font-size: 12px;
+				`;
+				const codeEditor = document.createElement("textarea");
+				codeEditor.value = scene.manim_code || "";
+				codeEditor.placeholder = "# Your Manim code here";
+				codeEditor.style.cssText = `
+					width: 100%;
+					height: 150px;
+					margin-top: 5px;
+					padding: 8px;
+					background: #1e1e1e;
+					color: #d4d4d4;
+					border: 1px solid #555;
+					border-radius: 4px;
+					font-family: 'Consolas', 'Monaco', monospace;
+					font-size: 11px;
+					display: none;
+					resize: vertical;
+				`;
+				codeEditor.onchange = () => this.updateSceneCode(scene.id, codeEditor.value);
+				codeEditor.oninput = () => this.updateSceneCode(scene.id, codeEditor.value);
+				
+				let codeExpanded = false;
+				codeToggle.onclick = () => {
+					codeExpanded = !codeExpanded;
+					codeEditor.style.display = codeExpanded ? "block" : "none";
+					codeToggle.innerHTML = codeExpanded 
+						? "<span style='margin-right: 6px;'>▲</span> Hide Code"
+						: "<span style='margin-right: 6px;'>▼</span> Edit Code";
+				};
+				
+				if (scene.manim_code && scene.manim_code.trim()) {
+					codeExpanded = true;
+					codeEditor.style.display = "block";
+					codeToggle.innerHTML = "<span style='margin-right: 6px;'>▲</span> Hide Code";
+				}
+				
+				codeSection.appendChild(codeToggle);
+				codeSection.appendChild(codeEditor);
+				layerContent.appendChild(codeSection);
+				
+				// Add delete button
+				const deleteBtn = document.createElement("button");
+				deleteBtn.textContent = "Delete Scene";
+				deleteBtn.style.cssText = `
+					width: 100%;
+					margin-top: 8px;
+					padding: 6px;
+					background: #dc3545;
+					color: white;
+					border: none;
+					border-radius: 4px;
+					cursor: pointer;
+					font-size: 11px;
+				`;
+				deleteBtn.onclick = () => {
+					if (confirm(`Delete Scene ${scene.id}?`)) {
+						this.deleteScene(scene.id);
+					}
+				};
+				layerContent.appendChild(deleteBtn);
+				
+				// Add to a separate details area (not in visual timeline)
+				if (!this.detailsArea) {
+					this.detailsArea = document.createElement("div");
+					this.detailsArea.className = "timeline-details";
+					this.detailsArea.style.cssText = `
+						margin-top: 15px;
+						max-height: 400px;
+						overflow-y: auto;
+					`;
+					timelineContainer.appendChild(this.detailsArea);
+				}
+				this.detailsArea.appendChild(layer);
+			};
+			
+			// Get timeline duration for visual scaling
+			nodeType.prototype.getTimelineDuration = function() {
+				const timelineWidget = this.widgets.find((w) => w.name === "timeline_json");
+				if (!timelineWidget || !timelineWidget.inputEl) return 60;
+				
+				try {
+					const jsonStr = timelineWidget.inputEl.value || "{}";
+					const timeline = JSON.parse(jsonStr);
+					if (timeline.audio_duration && timeline.audio_duration > 0) {
+						return Math.max(timeline.audio_duration, 60);
+					}
+					const scenes = timeline.scenes || [];
+					if (scenes.length > 0) {
+						const maxEnd = Math.max(...scenes.map(s => s.end_time || 0));
+						return Math.max(maxEnd, 60);
+					}
+				} catch (e) {
+					console.error("Failed to parse timeline:", e);
+				}
+				return 60; // Default 60 seconds
+			};
+			
+			// Make timeline bar draggable
+			nodeType.prototype.makeTimelineBarDraggable = function(bar, scene) {
+				let isDragging = false;
+				let dragStartX = 0;
+				let startTime = 0;
+				
+				bar.onmousedown = (e) => {
+					isDragging = true;
+					dragStartX = e.clientX;
+					startTime = scene.start_time;
+					bar.style.cursor = "grabbing";
+					e.preventDefault();
+				};
+				
+				document.addEventListener("mousemove", (e) => {
+					if (!isDragging) return;
+					
+					const duration = this.getTimelineDuration();
+					const barRect = bar.parentElement.getBoundingClientRect();
+					const deltaX = e.clientX - dragStartX;
+					const deltaTime = (deltaX / barRect.width) * duration;
+					const newStartTime = Math.max(0, startTime + deltaTime);
+					const sceneDuration = scene.end_time - scene.start_time;
+					const newEndTime = newStartTime + sceneDuration;
+					
+					// Update visual position
+					const leftPercent = (newStartTime / duration) * 100;
+					bar.style.left = `${leftPercent}%`;
+					
+					// Update scene times
+					this.updateSceneTime(scene.id, "start", newStartTime);
+					this.updateSceneTime(scene.id, "end", newEndTime);
+				});
+				
+				document.addEventListener("mouseup", () => {
+					if (isDragging) {
+						isDragging = false;
+						bar.style.cursor = "move";
+						this.loadTimeline(); // Refresh to sync
+					}
+				});
 			};
 			
 			// Add new scene
