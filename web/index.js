@@ -270,17 +270,22 @@ app.registerExtension({
 			
 			// Create timeline UI
 			nodeType.prototype.createTimelineUI = function() {
+				console.log("[ManimTimeline] Creating timeline UI...");
 				const timelineWidget = this.widgets.find((w) => w.name === "timeline_json");
 				if (!timelineWidget) {
-					console.warn("Timeline widget not found");
+					console.warn("[ManimTimeline] Timeline widget not found, retrying...");
+					setTimeout(() => this.createTimelineUI(), 500);
 					return;
 				}
 				
 				// Wait for widget to be fully rendered
 				if (!timelineWidget.inputEl) {
+					console.log("[ManimTimeline] Widget not rendered yet, waiting...");
 					setTimeout(() => this.createTimelineUI(), 200);
 					return;
 				}
+				
+				console.log("[ManimTimeline] Widget found, creating UI elements...");
 				
 				const jsonInput = timelineWidget.inputEl;
 				const widgetParent = jsonInput.parentNode;
@@ -461,18 +466,30 @@ app.registerExtension({
 				widgetParent.insertBefore(jsonToggle, jsonInput);
 				
 				// Load timeline after everything is inserted
-				this.loadTimeline();
+				console.log("[ManimTimeline] UI created, loading timeline...");
+				setTimeout(() => {
+					this.loadTimeline();
+				}, 100);
 			};
 			
 			// Load timeline from JSON
 			nodeType.prototype.loadTimeline = function() {
 				const timelineWidget = this.widgets.find((w) => w.name === "timeline_json");
-				if (!timelineWidget || !this.tracksArea) return;
+				if (!timelineWidget) {
+					console.warn("[ManimTimeline] Timeline widget not found in loadTimeline");
+					return;
+				}
+				if (!this.tracksArea) {
+					console.warn("[ManimTimeline] Tracks area not found, UI may not be initialized");
+					return;
+				}
 				
 				try {
 					const jsonStr = timelineWidget.inputEl.value || "{}";
+					console.log("[ManimTimeline] Loading timeline from JSON:", jsonStr.substring(0, 100));
 					const timeline = JSON.parse(jsonStr);
 					const scenes = timeline.scenes || [];
+					console.log(`[ManimTimeline] Found ${scenes.length} scenes`);
 					
 				// Clear tracks and details
 				if (this.tracksArea) {
