@@ -295,12 +295,13 @@ config.frame_rate = 30
             with open(script_path, "w", encoding="utf-8") as f:
                 f.write(full_code)
             
-            # Build subprocess command
+            # Build subprocess command - render frames only (no video compilation)
             output_name = "output"
             cmd = [
                 "manim",
                 "-ql",  # low quality for faster rendering
                 "--disable_caching",
+                "--format", "png",  # Render as PNG frames
                 "--media_dir", temp_dir,
                 "-o", output_name,
                 script_path
@@ -314,70 +315,18 @@ config.frame_rate = 30
                 cwd=temp_dir
             )
             
-            # Check for output file (Manim creates output in various locations)
-            # Search for .mp4 files recursively in temp_dir
-            output_mp4 = None
-            for root, dirs, files in os.walk(temp_dir):
-                for file in files:
-                    if file.endswith('.mp4'):
-                        output_mp4 = os.path.join(root, file)
-                        break
-                if output_mp4:
-                    break
-            
-            if not output_mp4:
+            # Check for errors
+            if result.returncode != 0:
                 error_msg = result.stderr if result.stderr else result.stdout
-                logger.error("Manim rendering failed. Output file not found.")
+                logger.error("Manim rendering failed.")
                 logger.debug(f"Manim stderr: {result.stderr}")
                 logger.debug(f"Manim stdout: {result.stdout}")
-                raise RuntimeError(f"Manim rendering failed. Output file not found.\nLogs:\n{error_msg}")
+                raise RuntimeError(f"Manim rendering failed.\nLogs:\n{error_msg}")
             
-            # Instead of loading all frames into memory, copy video to output directory
-            # This is much more memory-efficient for long videos
-            import shutil
-            from pathlib import Path
+            # Save PNG frames and get preview
+            preview_tensor, mask_tensor = save_manim_frames(temp_dir)
             
-            # Get ComfyUI output directory (or use temp if not available)
-            try:
-                # Try to get ComfyUI's output directory
-                output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "output")
-                if not os.path.exists(output_dir):
-                    output_dir = temp_dir
-            except:
-                output_dir = temp_dir
-            
-            # Copy video to output directory with unique name
-            import time
-            timestamp = int(time.time() * 1000)
-            output_filename = f"manim_output_{timestamp}.mp4"
-            output_video_path = os.path.join(output_dir, output_filename)
-            
-            # Copy the video file
-            shutil.copy2(output_mp4, output_video_path)
-            logger.info(f"Video saved to: {output_video_path}")
-            
-            # For ComfyUI compatibility, we still need to return IMAGE tensor
-            # But we'll only load a preview frame (first frame) to keep memory usage low
-            cap = cv2.VideoCapture(output_mp4)
-            ret, first_frame = cap.read()
-            cap.release()
-            
-            if not ret:
-                raise RuntimeError("Failed to read first frame from video")
-            
-            # Convert first frame to tensor (just for preview)
-            frame_rgb = cv2.cvtColor(first_frame, cv2.COLOR_BGR2RGB)
-            frame_normalized = torch.from_numpy(frame_rgb.astype(np.float32) / 255.0)
-            # Add batch dimension: [1, H, W, C]
-            image_tensor = frame_normalized.unsqueeze(0)
-            
-            # Create mask for single frame
-            h, w, _ = image_tensor.shape[1:]
-            mask_tensor = torch.ones((1, h, w), dtype=torch.float32)
-            
-            logger.info(f"Returning video file path: {output_video_path} (preview frame only in tensor)")
-            
-            return (image_tensor, mask_tensor)
+            return (preview_tensor, mask_tensor)
 
 
 class ManimAudioCaptionNode:
