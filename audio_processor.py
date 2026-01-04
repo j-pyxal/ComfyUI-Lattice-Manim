@@ -46,10 +46,10 @@ except ImportError:
 
 def process_audio_input(audio_input, temp_dir):
     """
-    Extract audio from file path or AUDIO tensor, save to temp file.
+    Extract audio from file path, AUDIO tensor, or ComfyUI AUDIO dict, save to temp file.
     
     Args:
-        audio_input: Either a file path (str) or ComfyUI AUDIO tensor
+        audio_input: Either a file path (str), ComfyUI AUDIO tensor, or ComfyUI AUDIO dict
         temp_dir: Temporary directory to save audio file
     
     Returns:
@@ -57,8 +57,70 @@ def process_audio_input(audio_input, temp_dir):
     """
     audio_path = os.path.join(temp_dir, "audio_input.wav")
     
+    # Handle None
+    if audio_input is None:
+        return None
+    
+    # If it's a dict (ComfyUI AUDIO type format)
+    if isinstance(audio_input, dict):
+        logger.debug(f"Processing audio dict with keys: {audio_input.keys()}")
+        
+        # Check for file path in dict
+        if "file_path" in audio_input:
+            file_path = audio_input["file_path"]
+            if isinstance(file_path, str) and os.path.exists(file_path):
+                if file_path.lower().endswith('.wav'):
+                    return file_path
+                elif HAS_PYDUB:
+                    audio = AudioSegment.from_file(file_path)
+                    audio.export(audio_path, format="wav")
+                    return audio_path
+                else:
+                    import shutil
+                    shutil.copy(file_path, audio_path)
+                    return audio_path
+        
+        # Check for audio tensor in dict
+        if "audio" in audio_input and HAS_TORCHAUDIO:
+            audio_tensor = audio_input["audio"]
+            if isinstance(audio_tensor, torch.Tensor):
+                # Get sample rate from dict or use default
+                sample_rate = audio_input.get("sample_rate", 44100)
+                
+                # Handle tensor shapes
+                if len(audio_tensor.shape) == 3:
+                    audio_tensor = audio_tensor[0]  # [batch, channels, samples] -> [channels, samples]
+                elif len(audio_tensor.shape) == 2:
+                    pass  # Already [channels, samples]
+                else:
+                    raise ValueError(f"Unsupported audio tensor shape: {audio_tensor.shape}")
+                
+                # Convert to mono if stereo
+                if audio_tensor.shape[0] > 1:
+                    audio_tensor = audio_tensor.mean(dim=0, keepdim=True)
+                
+                # Save using torchaudio
+                torchaudio.save(audio_path, audio_tensor, sample_rate)
+                return audio_path
+        
+        # If dict has a string value that looks like a path
+        for key, value in audio_input.items():
+            if isinstance(value, str) and os.path.exists(value):
+                if value.lower().endswith('.wav'):
+                    return value
+                elif HAS_PYDUB:
+                    audio = AudioSegment.from_file(value)
+                    audio.export(audio_path, format="wav")
+                    return audio_path
+                else:
+                    import shutil
+                    shutil.copy(value, audio_path)
+                    return audio_path
+        
+        raise ValueError(f"Audio dict does not contain valid audio data. Keys: {list(audio_input.keys())}")
+    
     # If it's a string, assume it's a file path
-    if isinstance(audio_input, str):
+    elif isinstance(audio_input, str):
         if os.path.exists(audio_input):
             # Convert to WAV if needed
             if audio_input.lower().endswith('.wav'):
@@ -100,7 +162,7 @@ def process_audio_input(audio_input, temp_dir):
         return audio_path
     
     else:
-        raise ValueError(f"Unsupported audio input type: {type(audio_input)}")
+        raise ValueError(f"Unsupported audio input type: {type(audio_input)}. Expected dict, str, or torch.Tensor")
 
 
 def transcribe_audio(audio_path: str, model_size: str = "base", language: str = "en") -> Tuple[Any, Any]:
