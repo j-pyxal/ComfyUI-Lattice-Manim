@@ -455,11 +455,14 @@ class ManimAudioCaptionNode:
             raise ImportError("Manim is not installed. Please run pip install manim")
         
         # Process audio if provided
-        captions = None
-        audio_path = None
-        
-        if audio is not None or audio_file_path:
-            with tempfile.TemporaryDirectory() as temp_dir:
+        # Use a single temp directory for both audio processing and rendering
+        # so the audio file persists throughout the entire process
+        with tempfile.TemporaryDirectory() as temp_dir:
+            captions = None
+            audio_path = None
+            
+            if audio is not None or audio_file_path:
+                logger.info("Processing audio input...")
                 # Process audio input
                 if audio is not None:
                     audio_path = process_audio_input(audio, temp_dir)
@@ -467,43 +470,49 @@ class ManimAudioCaptionNode:
                     audio_path = process_audio_input(audio_file_path, temp_dir)
                 
                 if audio_path and enable_captions:
+                    logger.info("Transcribing audio for captions...")
                     # Transcribe audio
                     segments, info = transcribe_audio(audio_path, whisper_model, language)
                     captions = format_word_timestamps(segments)
-        
-        # Build configuration
-        config = {
-            'width': width,
-            'height': height,
-            'frame_rate': frame_rate,
-            'background_color': background_color,
-            'background_color_hex': background_color_hex,
-            'enable_captions': enable_captions,
-            'caption_style': caption_style,
-            'caption_position': caption_position,
-            'caption_font': caption_font,
-            'caption_font_size': caption_font_size,
-            'caption_color': caption_color,
-            'caption_bg_color': caption_bg_color,
-            'enable_shape_animations': enable_shape_animations,
-            'shape_animation_type': shape_animation_type,
-            'shape_preset': shape_preset,
-            'shape_color': shape_color,
-            'enable_color_animations': enable_color_animations,
-            'color_animation_type': color_animation_type,
-            'color_palette': color_palette,
-            'easing_function': easing_function,
-        }
-        
-        # Build Manim script
-        full_code = build_manim_script(code, captions, audio_path, config)
-        
-        # Render using existing logic
-        with tempfile.TemporaryDirectory() as temp_dir:
+                    logger.info(f"Transcription complete. Found {len(captions)} words.")
+            
+            # Build configuration
+            logger.info("Building configuration...")
+            config = {
+                'width': width,
+                'height': height,
+                'frame_rate': frame_rate,
+                'background_color': background_color,
+                'background_color_hex': background_color_hex,
+                'enable_captions': enable_captions,
+                'caption_style': caption_style,
+                'caption_position': caption_position,
+                'caption_font': caption_font,
+                'caption_font_size': caption_font_size,
+                'caption_color': caption_color,
+                'caption_bg_color': caption_bg_color,
+                'enable_shape_animations': enable_shape_animations,
+                'shape_animation_type': shape_animation_type,
+                'shape_preset': shape_preset,
+                'shape_color': shape_color,
+                'enable_color_animations': enable_color_animations,
+                'color_animation_type': color_animation_type,
+                'color_palette': color_palette,
+                'easing_function': easing_function,
+            }
+            
+            # Build Manim script
+            logger.info("Building Manim script...")
+            full_code = build_manim_script(code, captions, audio_path, config)
+            logger.info(f"Manim script built ({len(full_code)} characters)")
+            
+            # Render using existing logic
             script_path = os.path.join(temp_dir, "script.py")
             
+            logger.info("Writing Manim script to file...")
             with open(script_path, "w", encoding="utf-8") as f:
                 f.write(full_code)
+            logger.info(f"Script written to: {script_path}")
             
             output_name = "output"
             cmd = [
@@ -515,6 +524,8 @@ class ManimAudioCaptionNode:
                 script_path
             ]
             
+            logger.info("Starting Manim rendering...")
+            logger.debug(f"Manim command: {' '.join(cmd)}")
             result = subprocess.run(
                 cmd,
                 capture_output=True,
@@ -522,22 +533,26 @@ class ManimAudioCaptionNode:
                 cwd=temp_dir
             )
             
+            logger.info("Manim rendering completed")
+            
             # Check for errors
             if result.returncode != 0:
                 error_msg = result.stderr if result.stderr else result.stdout
                 logger.error("Manim rendering failed.")
-                logger.debug(f"Manim stderr: {result.stderr}")
-                logger.debug(f"Manim stdout: {result.stdout}")
+                logger.error(f"Manim stderr: {result.stderr}")
+                logger.error(f"Manim stdout: {result.stdout}")
                 raise RuntimeError(f"Manim rendering failed.\nLogs:\n{error_msg}")
             
             # Log Manim output for debugging
             if result.stdout:
-                logger.debug(f"Manim stdout: {result.stdout[:500]}")
+                logger.info(f"Manim stdout (first 500 chars): {result.stdout[:500]}")
             if result.stderr:
-                logger.debug(f"Manim stderr: {result.stderr[:500]}")
+                logger.debug(f"Manim stderr (first 500 chars): {result.stderr[:500]}")
             
             # Save PNG frames and get preview
+            logger.info("Extracting PNG frames from Manim output...")
             preview_tensor, mask_tensor = save_manim_frames(temp_dir)
+            logger.info("Frame extraction complete")
             
             return (preview_tensor, mask_tensor)
 
