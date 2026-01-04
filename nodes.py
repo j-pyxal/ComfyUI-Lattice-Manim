@@ -29,34 +29,75 @@ except ImportError:
 MAX_FRAMES_SAFE = 2000
 
 
-def save_video_and_get_preview(video_path: str) -> Tuple[torch.Tensor, torch.Tensor, str]:
+def save_manim_frames(temp_dir: str) -> Tuple[torch.Tensor, torch.Tensor]:
     """
-    Save video to output directory and return preview frame.
-    This is much more memory-efficient than loading all frames.
+    Find and save Manim-rendered PNG frames to output directory.
+    Manim renders frames to partial_movie_files directory.
     
     Args:
-        video_path: Path to video file
+        temp_dir: Temporary directory where Manim rendered
     
     Returns:
-        Tuple of (preview_frame_tensor, mask_tensor, saved_video_path)
+        Tuple of (first_frame_tensor, mask_tensor) for preview
     """
     import shutil
     import time
+    import glob
     
-    # Get video properties
-    cap = cv2.VideoCapture(video_path)
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    # Find ComfyUI output directory
+    try:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        comfyui_root = os.path.dirname(os.path.dirname(current_dir))
+        output_dir = os.path.join(comfyui_root, "output")
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
+    except:
+        output_dir = temp_dir
     
-    # Read first frame for preview
-    ret, first_frame = cap.read()
-    cap.release()
+    # Manim stores frames in partial_movie_files directory
+    # Search for PNG files in the temp directory
+    frame_files = []
+    for root, dirs, files in os.walk(temp_dir):
+        for file in files:
+            if file.endswith('.png'):
+                frame_files.append(os.path.join(root, file))
     
-    if not ret:
-        raise RuntimeError("Failed to read first frame from video")
+    # Sort frames by name (Manim names them with frame numbers)
+    frame_files.sort()
     
-    # Convert first frame to tensor (just for preview)
+    if not frame_files:
+        # Fallback: check for partial_movie_files directory
+        partial_dir = os.path.join(temp_dir, "videos", "script")
+        if os.path.exists(partial_dir):
+            for root, dirs, files in os.walk(partial_dir):
+                for file in files:
+                    if file.endswith('.png'):
+                        frame_files.append(os.path.join(root, file))
+        frame_files.sort()
+    
+    if not frame_files:
+        raise RuntimeError("No PNG frames found in Manim output. Manim may not have rendered frames correctly.")
+    
+    logger.info(f"Found {len(frame_files)} PNG frames from Manim")
+    
+    # Copy frames to output directory with sequential naming
+    timestamp = int(time.time() * 1000)
+    saved_frames = []
+    for i, frame_path in enumerate(frame_files):
+        output_filename = f"manim_frame_{timestamp}_{i:06d}.png"
+        saved_frame_path = os.path.join(output_dir, output_filename)
+        shutil.copy2(frame_path, saved_frame_path)
+        saved_frames.append(saved_frame_path)
+    
+    logger.info(f"Saved {len(saved_frames)} frames to: {output_dir}")
+    
+    # Load first frame for preview
+    first_frame_path = saved_frames[0]
+    first_frame = cv2.imread(first_frame_path)
+    if first_frame is None:
+        raise RuntimeError(f"Failed to read first frame: {first_frame_path}")
+    
+    # Convert BGR to RGB and normalize
     frame_rgb = cv2.cvtColor(first_frame, cv2.COLOR_BGR2RGB)
     frame_normalized = torch.from_numpy(frame_rgb.astype(np.float32) / 255.0)
     # Add batch dimension: [1, H, W, C]
@@ -66,28 +107,7 @@ def save_video_and_get_preview(video_path: str) -> Tuple[torch.Tensor, torch.Ten
     h, w, _ = preview_tensor.shape[1:]
     mask_tensor = torch.ones((1, h, w), dtype=torch.float32)
     
-    # Save video to a permanent location (outside temp directory)
-    # Try to find ComfyUI output directory
-    try:
-        # Look for ComfyUI root (go up from custom_nodes)
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        comfyui_root = os.path.dirname(os.path.dirname(current_dir))
-        output_dir = os.path.join(comfyui_root, "output")
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir, exist_ok=True)
-    except:
-        # Fallback: use same directory as video
-        output_dir = os.path.dirname(os.path.abspath(video_path))
-    
-    # Copy video with unique name
-    timestamp = int(time.time() * 1000)
-    output_filename = f"manim_output_{timestamp}.mp4"
-    saved_video_path = os.path.join(output_dir, output_filename)
-    
-    shutil.copy2(video_path, saved_video_path)
-    logger.info(f"Video saved to: {saved_video_path} ({total_frames} frames, {width}x{height})")
-    
-    return preview_tensor, mask_tensor, saved_video_path
+    return preview_tensor, mask_tensor
 
 
 def extract_frames_from_video(video_path: str, max_frames: Optional[int] = None) -> Tuple[torch.Tensor, int, int]:
