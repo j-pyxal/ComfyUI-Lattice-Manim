@@ -165,7 +165,7 @@ app.registerExtension({
 			nodeType.prototype.onNodeCreated = function () {
 				const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;
 				
-				this.setSize([1000, 900]);
+				this.setSize([850, 750]);
 				
 				// Add timeline UI
 				setTimeout(() => {
@@ -178,35 +178,44 @@ app.registerExtension({
 			// Create timeline UI
 			nodeType.prototype.createTimelineUI = function() {
 				const timelineWidget = this.widgets.find((w) => w.name === "timeline_json");
-				if (!timelineWidget) return;
+				if (!timelineWidget) {
+					console.warn("Timeline widget not found");
+					return;
+				}
+				
+				// Wait for widget to be fully rendered
+				if (!timelineWidget.inputEl) {
+					setTimeout(() => this.createTimelineUI(), 200);
+					return;
+				}
 				
 				// Hide the raw JSON widget (make it collapsible for advanced users)
-				if (timelineWidget.inputEl) {
-					timelineWidget.inputEl.style.display = "none";
-					
-					// Add toggle button for advanced JSON editing
-					const jsonToggle = document.createElement("button");
-					jsonToggle.textContent = "Show Advanced JSON Editor";
-					jsonToggle.style.cssText = `
-						width: 100%;
-						margin: 5px 0;
-						padding: 6px;
-						background: #444;
-						color: #aaa;
-						border: 1px solid #666;
-						border-radius: 3px;
-						cursor: pointer;
-						font-size: 11px;
-					`;
-					jsonToggle.onclick = () => {
-						const isVisible = timelineWidget.inputEl.style.display !== "none";
-						timelineWidget.inputEl.style.display = isVisible ? "none" : "block";
-						jsonToggle.textContent = isVisible ? "Show Advanced JSON Editor" : "Hide JSON Editor";
-					};
-					
-					if (timelineWidget.inputEl.parentNode) {
-						timelineWidget.inputEl.parentNode.insertBefore(jsonToggle, timelineWidget.inputEl);
-					}
+				const jsonInput = timelineWidget.inputEl;
+				jsonInput.style.display = "none";
+				
+				// Add toggle button for advanced JSON editing
+				const jsonToggle = document.createElement("button");
+				jsonToggle.textContent = "Show Advanced JSON Editor";
+				jsonToggle.style.cssText = `
+					width: 100%;
+					margin: 5px 0;
+					padding: 6px;
+					background: #444;
+					color: #aaa;
+					border: 1px solid #666;
+					border-radius: 3px;
+					cursor: pointer;
+					font-size: 11px;
+				`;
+				jsonToggle.onclick = () => {
+					const isVisible = jsonInput.style.display !== "none";
+					jsonInput.style.display = isVisible ? "none" : "block";
+					jsonToggle.textContent = isVisible ? "Show Advanced JSON Editor" : "Hide JSON Editor";
+				};
+				
+				// Insert toggle before the JSON input
+				if (jsonInput.parentNode) {
+					jsonInput.parentNode.insertBefore(jsonToggle, jsonInput);
 				}
 				
 				// Create timeline container with better styling
@@ -305,12 +314,15 @@ app.registerExtension({
 				this.tracksArea = tracksArea;
 				this.loadTimeline();
 				
-				// Insert before timeline_json widget
-				if (timelineWidget.inputEl && timelineWidget.inputEl.parentNode) {
-					timelineWidget.inputEl.parentNode.insertBefore(
-						timelineContainer,
-						timelineWidget.inputEl.parentNode.firstChild
-					);
+				// Insert timeline container before the JSON toggle button
+				if (jsonToggle && jsonToggle.parentNode) {
+					jsonToggle.parentNode.insertBefore(timelineContainer, jsonToggle);
+				} else if (jsonInput && jsonInput.parentNode) {
+					// Fallback: insert before the JSON input
+					jsonInput.parentNode.insertBefore(timelineContainer, jsonInput);
+				} else {
+					// Last resort: try to append to widget area
+					console.warn("Could not find insertion point for timeline container");
 				}
 			};
 			
