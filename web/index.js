@@ -189,36 +189,17 @@ app.registerExtension({
 					return;
 				}
 				
-				// Hide the raw JSON widget (make it collapsible for advanced users)
 				const jsonInput = timelineWidget.inputEl;
-				jsonInput.style.display = "none";
-				
-				// Add toggle button for advanced JSON editing
-				const jsonToggle = document.createElement("button");
-				jsonToggle.textContent = "Show Advanced JSON Editor";
-				jsonToggle.style.cssText = `
-					width: 100%;
-					margin: 5px 0;
-					padding: 6px;
-					background: #444;
-					color: #aaa;
-					border: 1px solid #666;
-					border-radius: 3px;
-					cursor: pointer;
-					font-size: 11px;
-				`;
-				jsonToggle.onclick = () => {
-					const isVisible = jsonInput.style.display !== "none";
-					jsonInput.style.display = isVisible ? "none" : "block";
-					jsonToggle.textContent = isVisible ? "Show Advanced JSON Editor" : "Hide JSON Editor";
-				};
-				
-				// Insert toggle before the JSON input
-				if (jsonInput.parentNode) {
-					jsonInput.parentNode.insertBefore(jsonToggle, jsonInput);
+				const widgetParent = jsonInput.parentNode;
+				if (!widgetParent) {
+					setTimeout(() => this.createTimelineUI(), 200);
+					return;
 				}
 				
-				// Create timeline container with better styling
+				// Hide the raw JSON widget
+				jsonInput.style.display = "none";
+				
+				// Create timeline container FIRST
 				const timelineContainer = document.createElement("div");
 				timelineContainer.className = "manim-timeline-container";
 				timelineContainer.style.cssText = `
@@ -232,7 +213,7 @@ app.registerExtension({
 					font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 				`;
 				
-				// Timeline header with better design
+				// Timeline header
 				const header = document.createElement("div");
 				header.style.cssText = `
 					display: flex;
@@ -274,7 +255,7 @@ app.registerExtension({
 				header.appendChild(addSceneBtn);
 				timelineContainer.appendChild(header);
 				
-				// Timeline tracks area with better styling
+				// Timeline tracks area
 				const tracksArea = document.createElement("div");
 				tracksArea.className = "timeline-tracks";
 				tracksArea.style.cssText = `
@@ -287,43 +268,61 @@ app.registerExtension({
 					border: 1px solid #333;
 				`;
 				
-				// Custom scrollbar styling
-				const style = document.createElement("style");
-				style.textContent = `
-					.manim-timeline-container .timeline-tracks::-webkit-scrollbar {
-						width: 8px;
-					}
-					.manim-timeline-container .timeline-tracks::-webkit-scrollbar-track {
-						background: #1a1a1a;
-						border-radius: 4px;
-					}
-					.manim-timeline-container .timeline-tracks::-webkit-scrollbar-thumb {
-						background: #555;
-						border-radius: 4px;
-					}
-					.manim-timeline-container .timeline-tracks::-webkit-scrollbar-thumb:hover {
-						background: #666;
-					}
-				`;
-				document.head.appendChild(style);
+				// Custom scrollbar styling (only add once)
+				if (!document.getElementById('manim-timeline-scrollbar-style')) {
+					const style = document.createElement("style");
+					style.id = 'manim-timeline-scrollbar-style';
+					style.textContent = `
+						.manim-timeline-container .timeline-tracks::-webkit-scrollbar {
+							width: 8px;
+						}
+						.manim-timeline-container .timeline-tracks::-webkit-scrollbar-track {
+							background: #1a1a1a;
+							border-radius: 4px;
+						}
+						.manim-timeline-container .timeline-tracks::-webkit-scrollbar-thumb {
+							background: #555;
+							border-radius: 4px;
+						}
+						.manim-timeline-container .timeline-tracks::-webkit-scrollbar-thumb:hover {
+							background: #666;
+						}
+					`;
+					document.head.appendChild(style);
+				}
 				
 				timelineContainer.appendChild(tracksArea);
 				
-				// Load and render timeline
+				// Store references
 				this.timelineContainer = timelineContainer;
 				this.tracksArea = tracksArea;
-				this.loadTimeline();
 				
-				// Insert timeline container before the JSON toggle button
-				if (jsonToggle && jsonToggle.parentNode) {
-					jsonToggle.parentNode.insertBefore(timelineContainer, jsonToggle);
-				} else if (jsonInput && jsonInput.parentNode) {
-					// Fallback: insert before the JSON input
-					jsonInput.parentNode.insertBefore(timelineContainer, jsonInput);
-				} else {
-					// Last resort: try to append to widget area
-					console.warn("Could not find insertion point for timeline container");
-				}
+				// Insert timeline container BEFORE the JSON input
+				widgetParent.insertBefore(timelineContainer, jsonInput);
+				
+				// Add toggle button for advanced JSON editing AFTER timeline
+				const jsonToggle = document.createElement("button");
+				jsonToggle.textContent = "Show Advanced JSON Editor";
+				jsonToggle.style.cssText = `
+					width: 100%;
+					margin: 5px 0;
+					padding: 6px;
+					background: #444;
+					color: #aaa;
+					border: 1px solid #666;
+					border-radius: 3px;
+					cursor: pointer;
+					font-size: 11px;
+				`;
+				jsonToggle.onclick = () => {
+					const isVisible = jsonInput.style.display !== "none";
+					jsonInput.style.display = isVisible ? "none" : "block";
+					jsonToggle.textContent = isVisible ? "Show Advanced JSON Editor" : "Hide JSON Editor";
+				};
+				widgetParent.insertBefore(jsonToggle, jsonInput);
+				
+				// Load timeline after everything is inserted
+				this.loadTimeline();
 			};
 			
 			// Load timeline from JSON
