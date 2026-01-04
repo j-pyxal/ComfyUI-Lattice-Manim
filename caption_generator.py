@@ -111,17 +111,12 @@ self.add(caption_text)
         words_so_far = ' '.join([w['word'].strip() for w in valid_words[:i+1] if w['word'].strip()])
         words_so_far = words_so_far.replace('"', '\\"').replace("'", "\\'")
         
-        # Wait until the word's start time (absolute timing)
-        wait_time = start - (valid_words[i-1]['end'] if i > 0 else 0.0)
-        if i == 0:
-            wait_time = start  # First word: wait until its start time
-        
         code += f"""
 # Word {i}: "{clean_word}" ({start:.2f}s - {end:.2f}s)
 # Wait until word start time (absolute sync with audio)
 if current_time < {start:.3f}:
     self.wait({start:.3f} - current_time)
-    current_time = {start:.3f}
+current_time = {start:.3f}
 
 # Update caption text
 next_caption = Text("{words_so_far}", font="{font}", font_size={font_size}, color={text_color})
@@ -231,7 +226,7 @@ self.add(caption_text)
 # Wait until sentence start time (absolute sync with audio)
 if current_time < {start_time:.3f}:
     self.wait({start_time:.3f} - current_time)
-    current_time = {start_time:.3f}
+current_time = {start_time:.3f}
 
 # Update caption text
 sentence_obj = Text("{sentence_text_escaped}", font="{font}", font_size={font_size}, color={text_color})
@@ -356,7 +351,7 @@ self.add(sentence_text, word_text)
 # Wait until word start time (absolute sync with audio)
 if current_time < {start:.3f}:
     self.wait({start:.3f} - current_time)
-    current_time = {start:.3f}
+current_time = {start:.3f}
 
 # Update caption text
 word_obj = Text("{word_escaped}", font="{font}", font_size={font_size * 0.7}, color=YELLOW)
