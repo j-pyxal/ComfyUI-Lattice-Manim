@@ -257,8 +257,8 @@ app.registerExtension({
 			nodeType.prototype.onNodeCreated = function () {
 				const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;
 				
-				// Increase size to prevent cut-off
-				this.setSize([1200, 900]);
+				// Increase size to prevent cut-off and give more space
+				this.setSize([1400, 1200]);
 				
 				// Add timeline UI
 				setTimeout(() => {
@@ -309,6 +309,9 @@ app.registerExtension({
 					border: 1px solid #444;
 					box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 					font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+					position: relative;
+					pointer-events: auto;
+					z-index: 1;
 				`;
 				
 				// Timeline header
@@ -366,6 +369,7 @@ app.registerExtension({
 					margin-bottom: 15px;
 					overflow-x: auto;
 					overflow-y: hidden;
+					pointer-events: auto;
 				`;
 				
 				// Time ruler
@@ -408,6 +412,7 @@ app.registerExtension({
 					overflow-x: hidden;
 					padding: 8px;
 					position: relative;
+					pointer-events: auto;
 				`;
 				
 				// Custom scrollbar styling (only add once)
