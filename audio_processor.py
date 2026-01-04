@@ -7,6 +7,7 @@ import os
 import tempfile
 import numpy as np
 import hashlib
+import shutil
 from typing import Tuple, List, Dict, Optional, Any
 
 # Import logger
@@ -45,6 +46,112 @@ try:
     HAS_PYDUB = True
 except ImportError:
     HAS_PYDUB = False
+
+
+# Whisper model approximate sizes in MB (for disk space checking)
+WHISPER_MODEL_SIZES = {
+    "tiny": 75,
+    "base": 150,
+    "small": 500,
+    "medium": 1500,
+    "large": 3000,
+    "large-v2": 3000,
+    "large-v3": 3000,
+}
+
+
+def get_available_disk_space(path: str) -> float:
+    """
+    Get available disk space in MB for the given path.
+    
+    Args:
+        path: Path to check disk space for
+        
+    Returns:
+        Available space in MB, or -1 if unable to determine
+    """
+    try:
+        stat = shutil.disk_usage(path)
+        available_mb = stat.free / (1024 * 1024)
+        return available_mb
+    except Exception as e:
+        logger.warning(f"Could not determine disk space for {path}: {e}")
+        return -1
+
+
+def get_model_size_mb(model_size: str) -> float:
+    """
+    Get approximate model size in MB.
+    
+    Args:
+        model_size: Whisper model size string
+        
+    Returns:
+        Approximate size in MB
+    """
+    return WHISPER_MODEL_SIZES.get(model_size.lower(), 3000)  # Default to large if unknown
+
+
+def check_disk_space_for_model(model_size: str, cache_dir: Optional[str] = None) -> Tuple[bool, str]:
+    """
+    Check if there's enough disk space to download the Whisper model.
+    
+    Args:
+        model_size: Whisper model size
+        cache_dir: HuggingFace cache directory (optional)
+        
+    Returns:
+        Tuple of (has_space, error_message)
+    """
+    # Get model size
+    model_size_mb = get_model_size_mb(model_size)
+    
+    # Determine cache directory
+    if cache_dir is None:
+        # Try to get HuggingFace cache directory
+        cache_dir = os.path.expanduser("~/.cache/huggingface")
+        if not os.path.exists(cache_dir):
+            # Fallback to temp directory
+            cache_dir = tempfile.gettempdir()
+    
+    # Check available space
+    available_mb = get_available_disk_space(cache_dir)
+    
+    if available_mb < 0:
+        # Can't determine space, allow attempt but warn
+        logger.warning("Could not determine available disk space. Proceeding with model download...")
+        return True, ""
+    
+    # Add 20% buffer for safety
+    required_mb = model_size_mb * 1.2
+    
+    if available_mb < required_mb:
+        # Suggest smaller models
+        smaller_models = []
+        for size, size_mb in sorted(WHISPER_MODEL_SIZES.items(), key=lambda x: x[1]):
+            if size_mb < available_mb * 0.8:  # 80% of available space
+                smaller_models.append(f"{size} (~{size_mb} MB)")
+        
+        error_msg = (
+            f"Insufficient disk space to download Whisper model '{model_size}'.\n"
+            f"  Required: ~{model_size_mb:.0f} MB\n"
+            f"  Available: {available_mb:.0f} MB\n"
+            f"  Cache location: {cache_dir}\n"
+        )
+        
+        if smaller_models:
+            error_msg += f"\nSuggested smaller models that fit:\n"
+            for model in smaller_models:
+                error_msg += f"  - {model}\n"
+        else:
+            error_msg += (
+                f"\nNo Whisper models will fit in available space.\n"
+                f"Please free up at least {required_mb - available_mb:.0f} MB of disk space."
+            )
+        
+        return False, error_msg
+    
+    return True, ""
 
 
 def process_audio_input(audio_input, temp_dir):
@@ -231,12 +338,44 @@ def transcribe_audio(audio_path: str, model_size: str = "base", language: str = 
     model_key = f"{model_size}_{device}_{compute_type}"
     if model_key not in _whisper_models:
         logger.info(f"Loading Whisper model: {model_size} on {device} ({compute_type})")
-        _whisper_models[model_key] = WhisperModel(
-            model_size, 
-            device=device, 
-            compute_type=compute_type
-        )
-        logger.info("Whisper model loaded successfully")
+        
+        # Check disk space before attempting download
+        try:
+            # Try to get HuggingFace cache directory
+            import huggingface_hub
+            cache_dir = huggingface_hub.constants.HF_HUB_CACHE
+        except (ImportError, AttributeError):
+            cache_dir = os.path.expanduser("~/.cache/huggingface")
+        
+        has_space, error_msg = check_disk_space_for_model(model_size, cache_dir)
+        if not has_space:
+            logger.error(error_msg)
+            raise OSError(f"Insufficient disk space for Whisper model '{model_size}'.\n{error_msg}")
+        
+        try:
+            _whisper_models[model_key] = WhisperModel(
+                model_size, 
+                device=device, 
+                compute_type=compute_type
+            )
+            logger.info("Whisper model loaded successfully")
+        except OSError as e:
+            # Check if it's a disk space error
+            if "No space left on device" in str(e) or "Errno 28" in str(e):
+                error_msg = (
+                    f"Disk space error while downloading Whisper model '{model_size}'.\n"
+                    f"  Model size: ~{get_model_size_mb(model_size):.0f} MB\n"
+                    f"  Cache location: {cache_dir}\n"
+                    f"\nSuggested solutions:\n"
+                    f"  1. Free up disk space (need at least {get_model_size_mb(model_size) * 1.2:.0f} MB)\n"
+                    f"  2. Use a smaller model (tiny, base, small, or medium)\n"
+                    f"  3. Change HuggingFace cache directory: set HF_HOME environment variable"
+                )
+                logger.error(error_msg)
+                raise OSError(error_msg) from e
+            else:
+                # Re-raise other OSErrors
+                raise
     else:
         logger.debug(f"Reusing cached Whisper model: {model_key}")
     
