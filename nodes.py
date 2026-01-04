@@ -108,55 +108,12 @@ config.frame_rate = 30
                 logger.debug(f"Manim stdout: {result.stdout}")
                 raise RuntimeError(f"Manim rendering failed. Output file not found.\nLogs:\n{error_msg}")
             
-            # Read video frames using OpenCV - memory-efficient approach
-            cap = cv2.VideoCapture(output_mp4)
-            
-            # Get video properties first
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            
-            if total_frames == 0:
-                cap.release()
-                error_msg = "No frames extracted from Manim output video"
-                logger.error(error_msg)
-                raise RuntimeError(error_msg)
-            
-            logger.info(f"Extracting {total_frames} frames ({width}x{height}) - estimated memory: {total_frames * height * width * 3 * 4 / (1024**3):.2f} GB")
-            
-            # Pre-allocate tensor to avoid memory spikes from list + stack
-            image_tensor = torch.zeros((total_frames, height, width, 3), dtype=torch.float32)
-            
-            frame_idx = 0
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                
-                # Convert BGR to RGB and normalize in one step
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                frame_normalized = torch.from_numpy(frame_rgb.astype(np.float32) / 255.0)
-                
-                # Write directly to pre-allocated tensor
-                image_tensor[frame_idx] = frame_normalized
-                frame_idx += 1
-                
-                # Log progress for long videos
-                if frame_idx % 100 == 0:
-                    logger.debug(f"Extracted {frame_idx}/{total_frames} frames...")
-            
-            cap.release()
-            
-            # Trim to actual frame count (in case video metadata was wrong)
-            if frame_idx < total_frames:
-                image_tensor = image_tensor[:frame_idx]
-                logger.info(f"Adjusted frame count from {total_frames} to {frame_idx}")
+            # Extract frames using helper function (with automatic frame limiting)
+            image_tensor, width, height = extract_frames_from_video(output_mp4)
             
             # Create corresponding Mask Tensor: [Batch, Height, Width] (all ones)
             batch_size, h, w, _ = image_tensor.shape
             mask_tensor = torch.ones((batch_size, h, w), dtype=torch.float32)
-            
-            logger.info(f"Successfully extracted {batch_size} frames")
             
             return (image_tensor, mask_tensor)
 
@@ -344,54 +301,11 @@ class ManimAudioCaptionNode:
                 logger.debug(f"Manim stdout: {result.stdout}")
                 raise RuntimeError(f"Manim rendering failed. Output file not found.\nLogs:\n{error_msg}")
             
-            # Extract frames - memory-efficient approach
-            cap = cv2.VideoCapture(output_mp4)
-            
-            # Get video properties first
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            
-            if total_frames == 0:
-                cap.release()
-                error_msg = "No frames extracted from Manim output video"
-                logger.error(error_msg)
-                raise RuntimeError(error_msg)
-            
-            logger.info(f"Extracting {total_frames} frames ({width}x{height}) - estimated memory: {total_frames * height * width * 3 * 4 / (1024**3):.2f} GB")
-            
-            # Pre-allocate tensor to avoid memory spikes from list + stack
-            image_tensor = torch.zeros((total_frames, height, width, 3), dtype=torch.float32)
-            
-            frame_idx = 0
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                
-                # Convert BGR to RGB and normalize in one step
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                frame_normalized = torch.from_numpy(frame_rgb.astype(np.float32) / 255.0)
-                
-                # Write directly to pre-allocated tensor
-                image_tensor[frame_idx] = frame_normalized
-                frame_idx += 1
-                
-                # Log progress for long videos
-                if frame_idx % 100 == 0:
-                    logger.debug(f"Extracted {frame_idx}/{total_frames} frames...")
-            
-            cap.release()
-            
-            # Trim to actual frame count (in case video metadata was wrong)
-            if frame_idx < total_frames:
-                image_tensor = image_tensor[:frame_idx]
-                logger.info(f"Adjusted frame count from {total_frames} to {frame_idx}")
+            # Extract frames using helper function (with automatic frame limiting)
+            image_tensor, width, height = extract_frames_from_video(output_mp4)
             
             batch_size, h, w, _ = image_tensor.shape
             mask_tensor = torch.ones((batch_size, h, w), dtype=torch.float32)
-            
-            logger.info(f"Successfully extracted {batch_size} frames")
             
             return (image_tensor, mask_tensor)
 
@@ -616,54 +530,11 @@ class DataVisualization(Scene):
                 logger.debug(f"Manim stdout: {result.stdout}")
                 raise RuntimeError(f"Manim rendering failed. Output file not found.\nLogs:\n{error_msg}")
             
-            # Extract frames - memory-efficient approach
-            cap = cv2.VideoCapture(output_mp4)
-            
-            # Get video properties first
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            
-            if total_frames == 0:
-                cap.release()
-                error_msg = "No frames extracted from Manim output video"
-                logger.error(error_msg)
-                raise RuntimeError(error_msg)
-            
-            logger.info(f"Extracting {total_frames} frames ({width}x{height}) - estimated memory: {total_frames * height * width * 3 * 4 / (1024**3):.2f} GB")
-            
-            # Pre-allocate tensor to avoid memory spikes from list + stack
-            image_tensor = torch.zeros((total_frames, height, width, 3), dtype=torch.float32)
-            
-            frame_idx = 0
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                
-                # Convert BGR to RGB and normalize in one step
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                frame_normalized = torch.from_numpy(frame_rgb.astype(np.float32) / 255.0)
-                
-                # Write directly to pre-allocated tensor
-                image_tensor[frame_idx] = frame_normalized
-                frame_idx += 1
-                
-                # Log progress for long videos
-                if frame_idx % 100 == 0:
-                    logger.debug(f"Extracted {frame_idx}/{total_frames} frames...")
-            
-            cap.release()
-            
-            # Trim to actual frame count (in case video metadata was wrong)
-            if frame_idx < total_frames:
-                image_tensor = image_tensor[:frame_idx]
-                logger.info(f"Adjusted frame count from {total_frames} to {frame_idx}")
+            # Extract frames using helper function (with automatic frame limiting)
+            image_tensor, width, height = extract_frames_from_video(output_mp4)
             
             batch_size, h, w, _ = image_tensor.shape
             mask_tensor = torch.ones((batch_size, h, w), dtype=torch.float32)
-            
-            logger.info(f"Successfully extracted {batch_size} frames")
             
             return (image_tensor, mask_tensor)
 
@@ -925,54 +796,11 @@ config.frame_rate = {frame_rate}
                 logger.debug(f"Manim stdout: {result.stdout}")
                 raise RuntimeError(f"Manim rendering failed. Output file not found.\nLogs:\n{error_msg}")
             
-            # Extract frames - memory-efficient approach
-            cap = cv2.VideoCapture(output_mp4)
-            
-            # Get video properties first
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            
-            if total_frames == 0:
-                cap.release()
-                error_msg = "No frames extracted from Manim output video"
-                logger.error(error_msg)
-                raise RuntimeError(error_msg)
-            
-            logger.info(f"Extracting {total_frames} frames ({width}x{height}) - estimated memory: {total_frames * height * width * 3 * 4 / (1024**3):.2f} GB")
-            
-            # Pre-allocate tensor to avoid memory spikes from list + stack
-            image_tensor = torch.zeros((total_frames, height, width, 3), dtype=torch.float32)
-            
-            frame_idx = 0
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                
-                # Convert BGR to RGB and normalize in one step
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                frame_normalized = torch.from_numpy(frame_rgb.astype(np.float32) / 255.0)
-                
-                # Write directly to pre-allocated tensor
-                image_tensor[frame_idx] = frame_normalized
-                frame_idx += 1
-                
-                # Log progress for long videos
-                if frame_idx % 100 == 0:
-                    logger.debug(f"Extracted {frame_idx}/{total_frames} frames...")
-            
-            cap.release()
-            
-            # Trim to actual frame count (in case video metadata was wrong)
-            if frame_idx < total_frames:
-                image_tensor = image_tensor[:frame_idx]
-                logger.info(f"Adjusted frame count from {total_frames} to {frame_idx}")
+            # Extract frames using helper function (with automatic frame limiting)
+            image_tensor, width, height = extract_frames_from_video(output_mp4)
             
             batch_size, h, w, _ = image_tensor.shape
             mask_tensor = torch.ones((batch_size, h, w), dtype=torch.float32)
-            
-            logger.info(f"Successfully extracted {batch_size} frames")
             
             # Return updated timeline JSON
             updated_timeline_json = timeline_manager.to_json()
