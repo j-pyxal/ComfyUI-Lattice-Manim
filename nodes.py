@@ -55,28 +55,48 @@ def save_manim_frames(temp_dir: str) -> Tuple[torch.Tensor, torch.Tensor]:
         output_dir = temp_dir
     
     # Manim stores frames in partial_movie_files directory
-    # Search for PNG files in the temp directory
+    # Structure: {temp_dir}/videos/script/{quality}/partial_movie_files/{SceneName}/*.png
+    # Or: {temp_dir}/images/script/{SceneName}/*.png (if using --format png, but that's not a valid flag)
+    
     frame_files = []
-    for root, dirs, files in os.walk(temp_dir):
-        for file in files:
-            if file.endswith('.png'):
-                frame_files.append(os.path.join(root, file))
+    
+    # First, search for partial_movie_files (where Manim stores frames during rendering)
+    partial_movie_pattern = os.path.join(temp_dir, "videos", "script", "*", "partial_movie_files", "*", "*.png")
+    frame_files.extend(glob.glob(partial_movie_pattern))
+    
+    # Also check images directory (some Manim versions use this)
+    images_pattern = os.path.join(temp_dir, "images", "script", "*", "*.png")
+    frame_files.extend(glob.glob(images_pattern))
+    
+    # Fallback: recursive search for any PNG files
+    if not frame_files:
+        logger.debug(f"Searching recursively in {temp_dir} for PNG files...")
+        for root, dirs, files in os.walk(temp_dir):
+            for file in files:
+                if file.endswith('.png'):
+                    frame_files.append(os.path.join(root, file))
     
     # Sort frames by name (Manim names them with frame numbers)
     frame_files.sort()
     
     if not frame_files:
-        # Fallback: check for partial_movie_files directory
-        partial_dir = os.path.join(temp_dir, "videos", "script")
-        if os.path.exists(partial_dir):
-            for root, dirs, files in os.walk(partial_dir):
-                for file in files:
-                    if file.endswith('.png'):
-                        frame_files.append(os.path.join(root, file))
-        frame_files.sort()
-    
-    if not frame_files:
-        raise RuntimeError("No PNG frames found in Manim output. Manim may not have rendered frames correctly.")
+        # Log directory structure for debugging
+        logger.error(f"No PNG frames found. Searching in: {temp_dir}")
+        logger.debug(f"Directory structure:")
+        for root, dirs, files in os.walk(temp_dir):
+            level = root.replace(temp_dir, '').count(os.sep)
+            indent = ' ' * 2 * level
+            logger.debug(f"{indent}{os.path.basename(root)}/")
+            subindent = ' ' * 2 * (level + 1)
+            for file in files[:5]:  # Show first 5 files
+                logger.debug(f"{subindent}{file}")
+            if len(files) > 5:
+                logger.debug(f"{subindent}... and {len(files) - 5} more files")
+        
+        raise RuntimeError(
+            f"No PNG frames found in Manim output directory: {temp_dir}\n"
+            f"Manim may not have rendered frames correctly. Check Manim logs above for errors."
+        )
     
     logger.info(f"Found {len(frame_files)} PNG frames from Manim")
     
@@ -295,13 +315,14 @@ config.frame_rate = 30
             with open(script_path, "w", encoding="utf-8") as f:
                 f.write(full_code)
             
-            # Build subprocess command - render frames only (no video compilation)
+            # Build subprocess command
+            # Note: Manim always renders frames to partial_movie_files, then compiles to video
+            # We'll extract frames from partial_movie_files after rendering
             output_name = "output"
             cmd = [
                 "manim",
                 "-ql",  # low quality for faster rendering
                 "--disable_caching",
-                "--format", "png",  # Render as PNG frames
                 "--media_dir", temp_dir,
                 "-o", output_name,
                 script_path
@@ -322,6 +343,12 @@ config.frame_rate = 30
                 logger.debug(f"Manim stderr: {result.stderr}")
                 logger.debug(f"Manim stdout: {result.stdout}")
                 raise RuntimeError(f"Manim rendering failed.\nLogs:\n{error_msg}")
+            
+            # Log Manim output for debugging
+            if result.stdout:
+                logger.debug(f"Manim stdout: {result.stdout[:500]}")
+            if result.stderr:
+                logger.debug(f"Manim stderr: {result.stderr[:500]}")
             
             # Save PNG frames and get preview
             preview_tensor, mask_tensor = save_manim_frames(temp_dir)
@@ -495,22 +522,19 @@ class ManimAudioCaptionNode:
                 cwd=temp_dir
             )
             
-            # Find output file
-            output_mp4 = None
-            for root, dirs, files in os.walk(temp_dir):
-                for file in files:
-                    if file.endswith('.mp4'):
-                        output_mp4 = os.path.join(root, file)
-                        break
-                if output_mp4:
-                    break
-            
-            if not output_mp4:
+            # Check for errors
+            if result.returncode != 0:
                 error_msg = result.stderr if result.stderr else result.stdout
-                logger.error("Manim rendering failed. Output file not found.")
+                logger.error("Manim rendering failed.")
                 logger.debug(f"Manim stderr: {result.stderr}")
                 logger.debug(f"Manim stdout: {result.stdout}")
-                raise RuntimeError(f"Manim rendering failed. Output file not found.\nLogs:\n{error_msg}")
+                raise RuntimeError(f"Manim rendering failed.\nLogs:\n{error_msg}")
+            
+            # Log Manim output for debugging
+            if result.stdout:
+                logger.debug(f"Manim stdout: {result.stdout[:500]}")
+            if result.stderr:
+                logger.debug(f"Manim stderr: {result.stderr[:500]}")
             
             # Save PNG frames and get preview
             preview_tensor, mask_tensor = save_manim_frames(temp_dir)
@@ -721,22 +745,19 @@ class DataVisualization(Scene):
                 cwd=temp_dir
             )
             
-            # Find output file
-            output_mp4 = None
-            for root, dirs, files in os.walk(temp_dir):
-                for file in files:
-                    if file.endswith('.mp4'):
-                        output_mp4 = os.path.join(root, file)
-                        break
-                if output_mp4:
-                    break
-            
-            if not output_mp4:
+            # Check for errors
+            if result.returncode != 0:
                 error_msg = result.stderr if result.stderr else result.stdout
-                logger.error("Manim rendering failed. Output file not found.")
+                logger.error("Manim rendering failed.")
                 logger.debug(f"Manim stderr: {result.stderr}")
                 logger.debug(f"Manim stdout: {result.stdout}")
-                raise RuntimeError(f"Manim rendering failed. Output file not found.\nLogs:\n{error_msg}")
+                raise RuntimeError(f"Manim rendering failed.\nLogs:\n{error_msg}")
+            
+            # Log Manim output for debugging
+            if result.stdout:
+                logger.debug(f"Manim stdout: {result.stdout[:500]}")
+            if result.stderr:
+                logger.debug(f"Manim stderr: {result.stderr[:500]}")
             
             # Save PNG frames and get preview
             preview_tensor, mask_tensor = save_manim_frames(temp_dir)
@@ -972,7 +993,6 @@ config.frame_rate = {frame_rate}
                 "manim",
                 "-ql",
                 "--disable_caching",
-                "--format", "png",  # Render as PNG frames
                 "--media_dir", temp_dir,
                 "-o", output_name,
                 script_path
