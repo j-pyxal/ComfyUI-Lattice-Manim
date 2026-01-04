@@ -24,9 +24,9 @@ except ImportError:
     logger = logging.getLogger(__name__)
 
 # Maximum safe number of frames to return (prevents memory issues)
-# Conservative limit: ~33 seconds at 30fps, ~1.2 GB at 1920x1080
-# For systems with limited RAM, this prevents allocation failures
-MAX_FRAMES_SAFE = 1000
+# This is a starting point - actual limits are calculated dynamically
+# based on resolution in extract_frames_from_video()
+MAX_FRAMES_SAFE = 2000
 
 
 def extract_frames_from_video(video_path: str, max_frames: Optional[int] = None) -> Tuple[torch.Tensor, int, int]:
