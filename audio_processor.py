@@ -80,9 +80,14 @@ def process_audio_input(audio_input, temp_dir):
                     shutil.copy(file_path, audio_path)
                     return audio_path
         
-        # Check for audio tensor in dict
-        if "audio" in audio_input and HAS_TORCHAUDIO:
+        # Check for audio tensor in dict (ComfyUI uses 'waveform' or 'audio')
+        audio_tensor = None
+        if "waveform" in audio_input:
+            audio_tensor = audio_input["waveform"]
+        elif "audio" in audio_input:
             audio_tensor = audio_input["audio"]
+        
+        if audio_tensor is not None and HAS_TORCHAUDIO:
             if isinstance(audio_tensor, torch.Tensor):
                 # Get sample rate from dict or use default
                 sample_rate = audio_input.get("sample_rate", 44100)

@@ -446,12 +446,14 @@ app.registerExtension({
 				this.tracksArea = tracksArea;
 				this.timeRuler = timeRuler;
 				
-				// Insert timeline container BEFORE the JSON input
-				// Make sure it doesn't block other widgets
-				const nextSibling = jsonInput.nextSibling;
-				if (nextSibling) {
-					widgetParent.insertBefore(timelineContainer, nextSibling);
+				// Insert timeline container right before the JSON input widget
+				// Find the widget container (usually the parent of the input element)
+				const widgetContainer = jsonInput.closest('.widget') || jsonInput.parentElement;
+				if (widgetContainer && widgetContainer.parentNode) {
+					// Insert before the widget container, not inside it
+					widgetContainer.parentNode.insertBefore(timelineContainer, widgetContainer);
 				} else {
+					// Fallback: insert before jsonInput
 					widgetParent.insertBefore(timelineContainer, jsonInput);
 				}
 				
@@ -474,7 +476,13 @@ app.registerExtension({
 					jsonInput.style.display = isVisible ? "none" : "block";
 					jsonToggle.textContent = isVisible ? "Show Advanced JSON Editor" : "Hide JSON Editor";
 				};
-				widgetParent.insertBefore(jsonToggle, jsonInput);
+				// Insert JSON toggle right before the JSON input widget container
+				const widgetContainer = jsonInput.closest('.widget') || jsonInput.parentElement;
+				if (widgetContainer && widgetContainer.parentNode) {
+					widgetContainer.parentNode.insertBefore(jsonToggle, widgetContainer);
+				} else {
+					widgetParent.insertBefore(jsonToggle, jsonInput);
+				}
 				
 				// Load timeline after everything is inserted
 				console.log("[ManimTimeline] UI created, loading timeline...");
