@@ -30,6 +30,9 @@ try:
 except ImportError:
     HAS_WHISPER = False
 
+# Global model cache to avoid reloading models
+_whisper_models = {}
+
 try:
     import torch
     import torchaudio
@@ -208,15 +211,48 @@ def transcribe_audio(audio_path: str, model_size: str = "base", language: str = 
     
     logger.info(f"Transcribing audio: {os.path.basename(audio_path)} (model: {model_size}, language: {language})")
     
-    # Load Whisper model
-    model = WhisperModel(model_size, device="cpu", compute_type="int8")
+    # Determine device and compute type
+    # Try to use GPU if available, fallback to CPU
+    device = "cpu"
+    compute_type = "int8"
+    
+    try:
+        import torch
+        if torch.cuda.is_available():
+            device = "cuda"
+            compute_type = "float16"  # Better performance on GPU
+            logger.info("Using GPU for Whisper transcription")
+        else:
+            logger.info("GPU not available, using CPU for Whisper transcription")
+    except ImportError:
+        logger.warning("PyTorch not available, cannot detect GPU. Using CPU.")
+    
+    # Cache model instances to avoid reloading
+    model_key = f"{model_size}_{device}_{compute_type}"
+    if model_key not in _whisper_models:
+        logger.info(f"Loading Whisper model: {model_size} on {device} ({compute_type})")
+        _whisper_models[model_key] = WhisperModel(
+            model_size, 
+            device=device, 
+            compute_type=compute_type
+        )
+        logger.info("Whisper model loaded successfully")
+    else:
+        logger.debug(f"Reusing cached Whisper model: {model_key}")
+    
+    model = _whisper_models[model_key]
     
     # Transcribe with word timestamps
+    logger.info("Starting transcription...")
     segments, info = model.transcribe(
         audio_path,
         word_timestamps=True,
-        language=language if language else None
+        language=language if language else None,
+        beam_size=5,  # Balance between speed and accuracy
+        vad_filter=True,  # Voice activity detection for better performance
+        vad_parameters=dict(min_silence_duration_ms=500)  # Skip silent parts
     )
+    logger.info("Transcription completed")
     
     # Convert generator to list for caching
     segments_list = list(segments)
