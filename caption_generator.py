@@ -33,6 +33,7 @@ def generate_caption_code(words, caption_style, position, font_config, color_con
 def create_word_by_word_animation(words, position, font_config, color_config):
     """
     Create word-by-word highlighting animation (karaoke style).
+    Uses ReplacementTransform for proper text content changes.
     
     Args:
         words: List of word dicts with 'word', 'start', 'end'
@@ -56,16 +57,23 @@ def create_word_by_word_animation(words, position, font_config, color_config):
     }
     pos = position_map.get(position, 'DOWN')
     
+    # Filter out empty words
+    valid_words = [w for w in words if w.get('word', '').strip()]
+    if not valid_words:
+        return "# No words to display\n"
+    
+    # Build initial empty text
     code = f"""
 # Word-by-word caption animation
-current_text = Text("", font="{font}", font_size={font_size}, color={text_color})
-current_text.to_edge({pos}, buff=0.5)
-
-# Background rectangle if needed
+# Initialize with empty text
+caption_text = Text("", font="{font}", font_size={font_size}, color={text_color})
+caption_text.to_edge({pos}, buff=0.5)
 """
     
+    # Background rectangle if needed
     if bg_color != 'TRANSPARENT':
         code += f"""
+# Background rectangle
 bg_rect = Rectangle(
     width=config.frame_width * 0.9,
     height={font_size * 1.5} / config.pixel_height * config.frame_height,
@@ -78,38 +86,39 @@ self.add(bg_rect)
 """
     
     code += """
-# Add initial text to scene
-self.add(current_text)
+# Add caption text to scene
+self.add(caption_text)
 
-# Animate words
+# Animate words word-by-word
 """
     
-    # Generate code for each word
-    for i, word_data in enumerate(words):
+    # Generate code for each word - build sentence progressively
+    for i, word_data in enumerate(valid_words):
         word = word_data['word']
         start = word_data['start']
         end = word_data['end']
-        duration = end - start
+        duration = max(0.1, end - start)  # Ensure minimum duration
         
-        # Clean word (remove punctuation for display)
-        clean_word = word.strip().replace('"', '\\"')  # Escape quotes
+        # Clean and escape text
+        clean_word = word.strip().replace('"', '\\"').replace("'", "\\'")
         if not clean_word:
             continue
         
         # Build full sentence up to current word for display
-        words_so_far = ' '.join([w['word'].strip() for w in words[:i+1]])
-        words_so_far = words_so_far.replace('"', '\\"')
+        words_so_far = ' '.join([w['word'].strip() for w in valid_words[:i+1] if w['word'].strip()])
+        words_so_far = words_so_far.replace('"', '\\"').replace("'", "\\'")
         
         code += f"""
 # Word {i}: "{clean_word}" ({start:.2f}s - {end:.2f}s)
-word_text = Text("{words_so_far}", font="{font}", font_size={font_size}, color={text_color})
-word_text.to_edge({pos}, buff=0.5)
+next_caption = Text("{words_so_far}", font="{font}", font_size={font_size}, color={text_color})
+next_caption.to_edge({pos}, buff=0.5)
 
+# Use ReplacementTransform for text content changes
 self.play(
-    Transform(current_text, word_text),
+    ReplacementTransform(caption_text, next_caption),
     run_time={duration:.3f}
 )
-self.wait(0.05)
+caption_text = next_caption
 """
     
     return code
@@ -197,15 +206,20 @@ self.add(caption_text)
         end_time = sentence_words[-1]['end']
         duration = end_time - start_time
         
+        # Escape text properly
+        sentence_text_escaped = sentence_text.replace('"', '\\"').replace("'", "\\'")
+        
         code += f"""
 # Sentence {i}: "{sentence_text[:50]}..." ({start_time:.2f}s - {end_time:.2f}s)
-sentence_obj = Text("{sentence_text}", font="{font}", font_size={font_size}, color={text_color})
+sentence_obj = Text("{sentence_text_escaped}", font="{font}", font_size={font_size}, color={text_color})
 sentence_obj.to_edge({pos}, buff=0.5)
 
+# Use ReplacementTransform for text content changes
 self.play(
-    Transform(caption_text, sentence_obj),
+    ReplacementTransform(caption_text, sentence_obj),
     run_time={duration:.3f}
 )
+caption_text = sentence_obj
 self.wait(0.1)
 """
     
@@ -308,19 +322,26 @@ self.add(sentence_text, word_text)
                     sentence_text_str = ' '.join(w['word'].strip() for w in sent_words)
                     break
         
+        # Escape text properly
+        word_escaped = word.replace('"', '\\"').replace("'", "\\'")
+        sentence_escaped = sentence_text_str.replace('"', '\\"').replace("'", "\\'")
+        
         code += f"""
-# Word {i}: "{word}" | Sentence: "{sentence_text_str[:30]}..."
-word_obj = Text("{word}", font="{font}", font_size={font_size * 0.7}, color=YELLOW)
-sentence_obj = Text("{sentence_text_str}", font="{font}", font_size={font_size}, color={text_color})
+# Word {i}: "{word_escaped}" | Sentence: "{sentence_text_str[:30]}..."
+word_obj = Text("{word_escaped}", font="{font}", font_size={font_size * 0.7}, color=YELLOW)
+sentence_obj = Text("{sentence_escaped}", font="{font}", font_size={font_size}, color={text_color})
 
 word_obj.to_edge({pos}, buff=0.3)
 sentence_obj.to_edge({pos}, buff=0.7)
 
+# Use ReplacementTransform for text content changes
 self.play(
-    Transform(word_text, word_obj),
-    Transform(sentence_text, sentence_obj),
+    ReplacementTransform(word_text, word_obj),
+    ReplacementTransform(sentence_text, sentence_obj),
     run_time={duration:.3f}
 )
+word_text = word_obj
+sentence_text = sentence_obj
 """
     
     return code
