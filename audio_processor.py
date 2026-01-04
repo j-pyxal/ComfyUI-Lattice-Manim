@@ -214,8 +214,46 @@ def process_audio_input(audio_input, temp_dir):
                 if audio_tensor.shape[0] > 1:
                     audio_tensor = audio_tensor.mean(dim=0, keepdim=True)
                 
+                # Validate and normalize audio tensor
+                # Check for invalid values
+                if torch.isnan(audio_tensor).any() or torch.isinf(audio_tensor).any():
+                    logger.warning("Audio tensor contains NaN or Inf values. Clipping to valid range.")
+                    audio_tensor = torch.nan_to_num(audio_tensor, nan=0.0, posinf=1.0, neginf=-1.0)
+                
+                # Ensure tensor is float32 (required by torchaudio)
+                if audio_tensor.dtype != torch.float32:
+                    audio_tensor = audio_tensor.to(torch.float32)
+                
+                # Normalize to [-1.0, 1.0] range if needed (torchaudio expects this range)
+                audio_max = torch.abs(audio_tensor).max()
+                if audio_max > 1.0:
+                    logger.debug(f"Audio tensor values exceed [-1, 1] range (max: {audio_max:.3f}). Normalizing...")
+                    audio_tensor = audio_tensor / audio_max
+                elif audio_max == 0.0:
+                    logger.warning("Audio tensor is all zeros. This may cause issues.")
+                
+                # Ensure sample rate is valid
+                if sample_rate <= 0 or not isinstance(sample_rate, (int, float)):
+                    logger.warning(f"Invalid sample rate: {sample_rate}. Using default 44100.")
+                    sample_rate = 44100
+                
+                # Ensure tensor shape is correct: [channels, samples]
+                if len(audio_tensor.shape) != 2:
+                    raise ValueError(f"Audio tensor must be 2D [channels, samples], got shape: {audio_tensor.shape}")
+                
+                if audio_tensor.shape[0] == 0 or audio_tensor.shape[1] == 0:
+                    raise ValueError(f"Audio tensor has invalid dimensions: {audio_tensor.shape}")
+                
+                logger.debug(f"Saving audio: shape={audio_tensor.shape}, dtype={audio_tensor.dtype}, sample_rate={sample_rate}")
+                
                 # Save using torchaudio
-                torchaudio.save(audio_path, audio_tensor, sample_rate)
+                try:
+                    torchaudio.save(audio_path, audio_tensor, int(sample_rate))
+                except Exception as e:
+                    logger.error(f"Failed to save audio tensor: shape={audio_tensor.shape}, dtype={audio_tensor.dtype}, sample_rate={sample_rate}")
+                    logger.error(f"Audio tensor stats: min={audio_tensor.min():.3f}, max={audio_tensor.max():.3f}, mean={audio_tensor.mean():.3f}")
+                    raise RuntimeError(f"Failed to save audio file: {e}") from e
+                
                 return audio_path
         
         # If dict has a string value that looks like a path
