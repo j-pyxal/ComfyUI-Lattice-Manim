@@ -23,6 +23,98 @@ except ImportError:
     import logging
     logger = logging.getLogger(__name__)
 
+# Maximum safe number of frames to return (prevents memory issues)
+# ~67 seconds at 30fps, ~2.5 GB at 1920x1080
+MAX_FRAMES_SAFE = 2000
+
+
+def extract_frames_from_video(video_path: str, max_frames: Optional[int] = None) -> Tuple[torch.Tensor, int, int]:
+    """
+    Extract frames from video file with automatic frame limiting to prevent memory issues.
+    
+    Args:
+        video_path: Path to video file
+        max_frames: Maximum frames to extract (defaults to MAX_FRAMES_SAFE)
+    
+    Returns:
+        Tuple of (image_tensor, width, height)
+    """
+    if max_frames is None:
+        max_frames = MAX_FRAMES_SAFE
+    
+    cap = cv2.VideoCapture(video_path)
+    
+    # Get video properties first
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    
+    if total_frames == 0:
+        cap.release()
+        error_msg = "No frames extracted from Manim output video"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
+    
+    # Calculate memory requirements
+    estimated_memory_gb = total_frames * height * width * 3 * 4 / (1024**3)
+    logger.info(f"Extracting {total_frames} frames ({width}x{height}) - estimated memory: {estimated_memory_gb:.2f} GB")
+    
+    # Safety limit: warn and limit frames if output would be too large
+    if total_frames > max_frames:
+        logger.warning(f"Video has {total_frames} frames, which would require {estimated_memory_gb:.2f} GB. Limiting to {max_frames} frames to prevent memory issues.")
+        logger.warning(f"Consider using frame sampling or splitting long videos into segments.")
+        # Sample frames evenly
+        frame_skip = total_frames / max_frames
+        target_frames = max_frames
+    else:
+        frame_skip = 1.0
+        target_frames = total_frames
+    
+    # Pre-allocate tensor to avoid memory spikes from list + stack
+    image_tensor = torch.zeros((target_frames, height, width, 3), dtype=torch.float32)
+    
+    frame_idx = 0
+    output_idx = 0
+    next_frame_to_keep = 0.0
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        # Sample frames if needed
+        if frame_idx >= next_frame_to_keep:
+            # Convert BGR to RGB and normalize in one step
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame_normalized = torch.from_numpy(frame_rgb.astype(np.float32) / 255.0)
+            
+            # Write directly to pre-allocated tensor
+            image_tensor[output_idx] = frame_normalized
+            output_idx += 1
+            next_frame_to_keep += frame_skip
+            
+            # Stop if we've reached our limit
+            if output_idx >= target_frames:
+                break
+        
+        frame_idx += 1
+        
+        # Log progress for long videos
+        if frame_idx % 100 == 0:
+            logger.debug(f"Processed {frame_idx}/{total_frames} frames, extracted {output_idx}/{target_frames}...")
+    
+    cap.release()
+    
+    # Trim to actual extracted frame count
+    if output_idx < target_frames:
+        image_tensor = image_tensor[:output_idx]
+        logger.info(f"Adjusted frame count from {target_frames} to {output_idx}")
+    
+    logger.info(f"Successfully extracted {output_idx} frames (from {frame_idx} total frames in video)")
+    
+    return image_tensor, width, height
+
+
 class ManimScriptNode:
     def __init__(self) -> None:
         pass
