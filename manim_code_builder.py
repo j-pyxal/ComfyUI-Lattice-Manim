@@ -38,21 +38,79 @@ def build_manim_script(user_code, captions, audio_path, config):
     if config.get('enable_color_animations', False):
         color_code = build_color_animation_section(config)
     
-    # Combine all parts
+    # Combine all parts - wrap in Scene class
     full_code = header
     
+    # Start Scene class
+    full_code += "\nclass CaptionedScene(Scene):\n"
+    full_code += "    def construct(self):\n"
+    
+    # Indent all code blocks
     if caption_code:
-        full_code += "\n# === CAPTIONS ===\n" + caption_code + "\n"
+        full_code += "        # === CAPTIONS ===\n"
+        # Indent each line of caption code
+        for line in caption_code.split("\n"):
+            if line.strip():  # Skip empty lines
+                full_code += "        " + line + "\n"
+            else:
+                full_code += "\n"
     
     if shape_code:
-        full_code += "\n# === SHAPE ANIMATIONS ===\n" + shape_code + "\n"
+        full_code += "        # === SHAPE ANIMATIONS ===\n"
+        for line in shape_code.split("\n"):
+            if line.strip():
+                full_code += "        " + line + "\n"
+            else:
+                full_code += "\n"
     
     if color_code:
-        full_code += "\n# === COLOR ANIMATIONS ===\n" + color_code + "\n"
+        full_code += "        # === COLOR ANIMATIONS ===\n"
+        for line in color_code.split("\n"):
+            if line.strip():
+                full_code += "        " + line + "\n"
+            else:
+                full_code += "\n"
     
-    # Add user code
+    # Add user code (check if it's already in a class)
     if user_code.strip():
-        full_code += "\n# === USER CODE ===\n" + user_code + "\n"
+        # Check if user code already has a Scene class
+        if "class" in user_code and "Scene" in user_code and "def construct" in user_code:
+            # User code is complete, extract just the construct method content
+            # Try to extract code from construct method
+            if "def construct(self):" in user_code:
+                construct_start = user_code.find("def construct(self):")
+                construct_end = user_code.find("\n\n", construct_start)
+                if construct_end == -1:
+                    construct_end = len(user_code)
+                construct_content = user_code[construct_start:construct_end]
+                # Extract lines after "def construct(self):"
+                lines = construct_content.split("\n")[1:]  # Skip method definition
+                full_code += "        # === USER CODE ===\n"
+                for line in lines:
+                    if line.strip():
+                        # Remove existing indentation and add our own
+                        dedented = line.lstrip()
+                        full_code += "        " + dedented + "\n"
+                    else:
+                        full_code += "\n"
+            else:
+                # Fallback: just add user code with indentation
+                full_code += "        # === USER CODE ===\n"
+                for line in user_code.split("\n"):
+                    if line.strip():
+                        dedented = line.lstrip()
+                        full_code += "        " + dedented + "\n"
+                    else:
+                        full_code += "\n"
+        else:
+            # User code is not in a class, add it with indentation
+            full_code += "        # === USER CODE ===\n"
+            for line in user_code.split("\n"):
+                if line.strip():
+                    dedented = line.lstrip()
+                    full_code += "        " + dedented + "\n"
+                else:
+                    full_code += "\n"
     
     return full_code
 
