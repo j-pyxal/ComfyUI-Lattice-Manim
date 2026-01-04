@@ -165,7 +165,7 @@ app.registerExtension({
 			nodeType.prototype.onNodeCreated = function () {
 				const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;
 				
-				this.setSize([900, 800]);
+				this.setSize([1000, 900]);
 				
 				// Add timeline UI
 				setTimeout(() => {
@@ -180,59 +180,124 @@ app.registerExtension({
 				const timelineWidget = this.widgets.find((w) => w.name === "timeline_json");
 				if (!timelineWidget) return;
 				
-				// Create timeline container
+				// Hide the raw JSON widget (make it collapsible for advanced users)
+				if (timelineWidget.inputEl) {
+					timelineWidget.inputEl.style.display = "none";
+					
+					// Add toggle button for advanced JSON editing
+					const jsonToggle = document.createElement("button");
+					jsonToggle.textContent = "Show Advanced JSON Editor";
+					jsonToggle.style.cssText = `
+						width: 100%;
+						margin: 5px 0;
+						padding: 6px;
+						background: #444;
+						color: #aaa;
+						border: 1px solid #666;
+						border-radius: 3px;
+						cursor: pointer;
+						font-size: 11px;
+					`;
+					jsonToggle.onclick = () => {
+						const isVisible = timelineWidget.inputEl.style.display !== "none";
+						timelineWidget.inputEl.style.display = isVisible ? "none" : "block";
+						jsonToggle.textContent = isVisible ? "Show Advanced JSON Editor" : "Hide JSON Editor";
+					};
+					
+					if (timelineWidget.inputEl.parentNode) {
+						timelineWidget.inputEl.parentNode.insertBefore(jsonToggle, timelineWidget.inputEl);
+					}
+				}
+				
+				// Create timeline container with better styling
 				const timelineContainer = document.createElement("div");
 				timelineContainer.className = "manim-timeline-container";
 				timelineContainer.style.cssText = `
 					width: 100%;
-					margin: 10px 0;
-					padding: 10px;
-					background: #2d2d2d;
-					border-radius: 4px;
-					font-family: monospace;
+					margin: 15px 0;
+					padding: 15px;
+					background: linear-gradient(135deg, #2a2a2a 0%, #1e1e1e 100%);
+					border-radius: 8px;
+					border: 1px solid #444;
+					box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+					font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 				`;
 				
-				// Timeline header
+				// Timeline header with better design
 				const header = document.createElement("div");
 				header.style.cssText = `
 					display: flex;
 					justify-content: space-between;
 					align-items: center;
-					margin-bottom: 10px;
-					padding: 5px;
-					border-bottom: 1px solid #555;
+					margin-bottom: 15px;
+					padding-bottom: 12px;
+					border-bottom: 2px solid #444;
 				`;
 				
-				const title = document.createElement("h3");
-				title.textContent = "Timeline Editor";
-				title.style.cssText = "margin: 0; color: #d4d4d4; font-size: 14px;";
+				const title = document.createElement("div");
+				title.innerHTML = `<span style="font-size: 16px; font-weight: 600; color: #fff; letter-spacing: 0.5px;">Timeline Editor</span>`;
 				
 				const addSceneBtn = document.createElement("button");
-				addSceneBtn.textContent = "+ Add Scene";
+				addSceneBtn.innerHTML = "<span style='font-size: 16px; margin-right: 4px;'>+</span> Add Scene";
 				addSceneBtn.style.cssText = `
-					padding: 5px 10px;
-					background: #3c3c3c;
-					color: #d4d4d4;
-					border: 1px solid #555;
-					border-radius: 3px;
+					padding: 8px 16px;
+					background: linear-gradient(135deg, #0074D9 0%, #0056b3 100%);
+					color: white;
+					border: none;
+					border-radius: 6px;
 					cursor: pointer;
+					font-weight: 500;
+					font-size: 13px;
+					transition: all 0.2s;
+					box-shadow: 0 2px 4px rgba(0,116,217,0.3);
 				`;
+				addSceneBtn.onmouseenter = () => {
+					addSceneBtn.style.transform = "translateY(-1px)";
+					addSceneBtn.style.boxShadow = "0 4px 8px rgba(0,116,217,0.4)";
+				};
+				addSceneBtn.onmouseleave = () => {
+					addSceneBtn.style.transform = "translateY(0)";
+					addSceneBtn.style.boxShadow = "0 2px 4px rgba(0,116,217,0.3)";
+				};
 				addSceneBtn.onclick = () => this.addNewScene();
 				
 				header.appendChild(title);
 				header.appendChild(addSceneBtn);
 				timelineContainer.appendChild(header);
 				
-				// Timeline tracks area
+				// Timeline tracks area with better styling
 				const tracksArea = document.createElement("div");
 				tracksArea.className = "timeline-tracks";
 				tracksArea.style.cssText = `
-					max-height: 400px;
+					max-height: 500px;
 					overflow-y: auto;
-					border: 1px solid #555;
-					border-radius: 3px;
-					padding: 5px;
+					overflow-x: hidden;
+					padding: 8px;
+					background: #1a1a1a;
+					border-radius: 6px;
+					border: 1px solid #333;
 				`;
+				
+				// Custom scrollbar styling
+				const style = document.createElement("style");
+				style.textContent = `
+					.manim-timeline-container .timeline-tracks::-webkit-scrollbar {
+						width: 8px;
+					}
+					.manim-timeline-container .timeline-tracks::-webkit-scrollbar-track {
+						background: #1a1a1a;
+						border-radius: 4px;
+					}
+					.manim-timeline-container .timeline-tracks::-webkit-scrollbar-thumb {
+						background: #555;
+						border-radius: 4px;
+					}
+					.manim-timeline-container .timeline-tracks::-webkit-scrollbar-thumb:hover {
+						background: #666;
+					}
+				`;
+				document.head.appendChild(style);
+				
 				timelineContainer.appendChild(tracksArea);
 				
 				// Load and render timeline
@@ -244,7 +309,7 @@ app.registerExtension({
 				if (timelineWidget.inputEl && timelineWidget.inputEl.parentNode) {
 					timelineWidget.inputEl.parentNode.insertBefore(
 						timelineContainer,
-						timelineWidget.inputEl
+						timelineWidget.inputEl.parentNode.firstChild
 					);
 				}
 			};
@@ -277,158 +342,266 @@ app.registerExtension({
 				layer.className = "timeline-layer";
 				layer.dataset.sceneId = scene.id;
 				layer.style.cssText = `
-					margin: 5px 0;
-					padding: 10px;
-					background: #3c3c3c;
-					border-radius: 3px;
-					border-left: 3px solid #0074D9;
+					margin: 10px 0;
+					padding: 15px;
+					background: linear-gradient(135deg, #2d2d2d 0%, #252525 100%);
+					border-radius: 8px;
+					border-left: 4px solid #0074D9;
+					border: 1px solid #444;
+					box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+					transition: all 0.2s;
 				`;
 				
-				// Layer header
+				layer.onmouseenter = () => {
+					layer.style.borderColor = "#0074D9";
+					layer.style.boxShadow = "0 4px 12px rgba(0,116,217,0.3)";
+				};
+				layer.onmouseleave = () => {
+					layer.style.borderColor = "#444";
+					layer.style.boxShadow = "0 2px 6px rgba(0,0,0,0.2)";
+				};
+				
+				// Layer header with better design
 				const layerHeader = document.createElement("div");
 				layerHeader.style.cssText = `
 					display: flex;
 					justify-content: space-between;
 					align-items: center;
-					margin-bottom: 8px;
+					margin-bottom: 12px;
+					padding-bottom: 10px;
+					border-bottom: 1px solid #444;
 				`;
 				
 				const layerTitle = document.createElement("div");
-				layerTitle.textContent = `Scene ${scene.id} (${scene.start_time.toFixed(2)}s - ${scene.end_time.toFixed(2)}s)`;
-				layerTitle.style.cssText = "color: #d4d4d4; font-weight: bold;";
+				const duration = (scene.end_time - scene.start_time).toFixed(2);
+				layerTitle.innerHTML = `
+					<span style="color: #0074D9; font-weight: 600; font-size: 14px;">Scene ${scene.id}</span>
+					<span style="color: #888; font-size: 12px; margin-left: 8px;">${scene.start_time.toFixed(2)}s - ${scene.end_time.toFixed(2)}s (${duration}s)</span>
+				`;
 				
 				const deleteBtn = document.createElement("button");
-				deleteBtn.textContent = "×";
+				deleteBtn.innerHTML = "×";
 				deleteBtn.style.cssText = `
-					background: #ff4444;
+					background: #dc3545;
 					color: white;
 					border: none;
-					border-radius: 3px;
-					width: 24px;
-					height: 24px;
+					border-radius: 4px;
+					width: 28px;
+					height: 28px;
 					cursor: pointer;
+					font-size: 18px;
+					line-height: 1;
+					transition: all 0.2s;
+					font-weight: bold;
 				`;
-				deleteBtn.onclick = () => this.deleteScene(scene.id);
+				deleteBtn.onmouseenter = () => {
+					deleteBtn.style.background = "#c82333";
+					deleteBtn.style.transform = "scale(1.1)";
+				};
+				deleteBtn.onmouseleave = () => {
+					deleteBtn.style.background = "#dc3545";
+					deleteBtn.style.transform = "scale(1)";
+				};
+				deleteBtn.onclick = () => {
+					if (confirm(`Delete Scene ${scene.id}?`)) {
+						this.deleteScene(scene.id);
+					}
+				};
 				
 				layerHeader.appendChild(layerTitle);
 				layerHeader.appendChild(deleteBtn);
 				layer.appendChild(layerHeader);
 				
-				// Time controls (in/out points)
+				// Time controls (in/out points) with better layout
 				const timeControls = document.createElement("div");
 				timeControls.style.cssText = `
-					display: flex;
-					gap: 10px;
-					margin: 5px 0;
-					align-items: center;
+					display: grid;
+					grid-template-columns: 1fr 1fr;
+					gap: 12px;
+					margin-bottom: 12px;
 				`;
 				
+				const inGroup = document.createElement("div");
+				inGroup.style.cssText = "display: flex; flex-direction: column; gap: 4px;";
+				const inLabel = document.createElement("label");
+				inLabel.textContent = "In Point (seconds)";
+				inLabel.style.cssText = "color: #aaa; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;";
 				const inPoint = document.createElement("input");
 				inPoint.type = "number";
 				inPoint.value = scene.start_time;
 				inPoint.step = 0.1;
+				inPoint.min = 0;
 				inPoint.style.cssText = `
-					width: 80px;
-					padding: 3px;
-					background: #2d2d2d;
-					color: #d4d4d4;
+					width: 100%;
+					padding: 8px;
+					background: #1a1a1a;
+					color: #fff;
 					border: 1px solid #555;
-					border-radius: 3px;
+					border-radius: 4px;
+					font-size: 13px;
+					transition: border-color 0.2s;
 				`;
+				inPoint.onfocus = () => inPoint.style.borderColor = "#0074D9";
+				inPoint.onblur = () => inPoint.style.borderColor = "#555";
 				inPoint.onchange = () => this.updateSceneTime(scene.id, "start", parseFloat(inPoint.value));
+				inGroup.appendChild(inLabel);
+				inGroup.appendChild(inPoint);
 				
+				const outGroup = document.createElement("div");
+				outGroup.style.cssText = "display: flex; flex-direction: column; gap: 4px;";
+				const outLabel = document.createElement("label");
+				outLabel.textContent = "Out Point (seconds)";
+				outLabel.style.cssText = "color: #aaa; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;";
 				const outPoint = document.createElement("input");
 				outPoint.type = "number";
 				outPoint.value = scene.end_time;
 				outPoint.step = 0.1;
+				outPoint.min = 0.1;
 				outPoint.style.cssText = inPoint.style.cssText;
+				outPoint.onfocus = () => outPoint.style.borderColor = "#0074D9";
+				outPoint.onblur = () => outPoint.style.borderColor = "#555";
 				outPoint.onchange = () => this.updateSceneTime(scene.id, "end", parseFloat(outPoint.value));
+				outGroup.appendChild(outLabel);
+				outGroup.appendChild(outPoint);
 				
-				timeControls.appendChild(document.createTextNode("In:"));
-				timeControls.appendChild(inPoint);
-				timeControls.appendChild(document.createTextNode("Out:"));
-				timeControls.appendChild(outPoint);
+				timeControls.appendChild(inGroup);
+				timeControls.appendChild(outGroup);
 				layer.appendChild(timeControls);
 				
-				// Prompt input
+				// Prompt input section with better styling
+				const promptSection = document.createElement("div");
+				promptSection.style.cssText = "margin-bottom: 12px;";
+				
 				const promptLabel = document.createElement("label");
-				promptLabel.textContent = "Visual Prompt:";
-				promptLabel.style.cssText = "display: block; color: #d4d4d4; margin-top: 8px;";
-				layer.appendChild(promptLabel);
+				promptLabel.textContent = "Visual Prompt";
+				promptLabel.style.cssText = "display: block; color: #fff; margin-bottom: 6px; font-size: 12px; font-weight: 500;";
 				
 				const promptInput = document.createElement("textarea");
 				promptInput.value = scene.prompt || "";
 				promptInput.placeholder = "Describe what you want to see (e.g., 'A blue circle rotating in the center')";
 				promptInput.style.cssText = `
 					width: 100%;
-					height: 60px;
-					padding: 5px;
-					background: #1e1e1e;
-					color: #d4d4d4;
+					height: 70px;
+					padding: 10px;
+					background: #1a1a1a;
+					color: #fff;
 					border: 1px solid #555;
-					border-radius: 3px;
+					border-radius: 4px;
 					font-family: inherit;
+					font-size: 13px;
 					resize: vertical;
+					transition: border-color 0.2s;
 				`;
+				promptInput.onfocus = () => promptInput.style.borderColor = "#0074D9";
+				promptInput.onblur = () => promptInput.style.borderColor = "#555";
 				promptInput.onchange = () => this.updateScenePrompt(scene.id, promptInput.value);
-				layer.appendChild(promptInput);
+				promptInput.oninput = () => this.updateScenePrompt(scene.id, promptInput.value);
 				
-				// Generate button
+				promptSection.appendChild(promptLabel);
+				promptSection.appendChild(promptInput);
+				layer.appendChild(promptSection);
+				
+				// Generate button with better styling
 				const generateBtn = document.createElement("button");
-				generateBtn.textContent = "🔄 Generate Code";
+				generateBtn.innerHTML = "<span style='margin-right: 6px;'>⚡</span> Generate Code from Prompt";
 				generateBtn.style.cssText = `
-					margin-top: 5px;
-					padding: 5px 10px;
-					background: #0074D9;
+					width: 100%;
+					margin-bottom: 12px;
+					padding: 10px;
+					background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
 					color: white;
 					border: none;
-					border-radius: 3px;
+					border-radius: 6px;
 					cursor: pointer;
+					font-weight: 500;
+					font-size: 13px;
+					transition: all 0.2s;
+					box-shadow: 0 2px 4px rgba(40,167,69,0.3);
 				`;
-				generateBtn.onclick = () => this.generateSceneCode(scene.id, promptInput.value);
+				generateBtn.onmouseenter = () => {
+					generateBtn.style.transform = "translateY(-1px)";
+					generateBtn.style.boxShadow = "0 4px 8px rgba(40,167,69,0.4)";
+				};
+				generateBtn.onmouseleave = () => {
+					generateBtn.style.transform = "translateY(0)";
+					generateBtn.style.boxShadow = "0 2px 4px rgba(40,167,69,0.3)";
+				};
+				generateBtn.onclick = () => {
+					generateBtn.textContent = "Generating...";
+					generateBtn.disabled = true;
+					setTimeout(() => {
+						this.generateSceneCode(scene.id, promptInput.value);
+						generateBtn.innerHTML = "<span style='margin-right: 6px;'>⚡</span> Generate Code from Prompt";
+						generateBtn.disabled = false;
+					}, 100);
+				};
 				layer.appendChild(generateBtn);
 				
-				// Code editor (collapsible)
+				// Code editor section with better design
 				const codeSection = document.createElement("div");
-				codeSection.style.cssText = "margin-top: 10px;";
+				codeSection.style.cssText = "margin-top: 12px; border-top: 1px solid #444; padding-top: 12px;";
 				
 				const codeToggle = document.createElement("button");
-				codeToggle.textContent = "▼ Edit Code";
+				codeToggle.innerHTML = "<span style='margin-right: 6px;'>▼</span> Edit Manim Code";
 				codeToggle.style.cssText = `
 					width: 100%;
-					padding: 5px;
-					background: #555;
-					color: #d4d4d4;
-					border: 1px solid #777;
-					border-radius: 3px;
+					padding: 10px;
+					background: #333;
+					color: #fff;
+					border: 1px solid #555;
+					border-radius: 6px;
 					cursor: pointer;
 					text-align: left;
+					font-weight: 500;
+					font-size: 13px;
+					transition: all 0.2s;
 				`;
+				codeToggle.onmouseenter = () => codeToggle.style.background = "#3a3a3a";
+				codeToggle.onmouseleave = () => codeToggle.style.background = "#333";
 				
 				const codeEditor = document.createElement("textarea");
 				codeEditor.value = scene.manim_code || "";
+				codeEditor.placeholder = "# Your Manim code here\n# Example:\ncircle = Circle(radius=1, color=BLUE)\nself.play(Create(circle))";
 				codeEditor.style.cssText = `
 					width: 100%;
-					height: 200px;
-					margin-top: 5px;
-					padding: 5px;
+					height: 250px;
+					margin-top: 8px;
+					padding: 12px;
 					background: #1e1e1e;
 					color: #d4d4d4;
 					border: 1px solid #555;
-					border-radius: 3px;
-					font-family: 'Consolas', 'Monaco', monospace;
+					border-radius: 4px;
+					font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
 					font-size: 12px;
+					line-height: 1.6;
 					display: none;
 					resize: vertical;
+					tab-size: 4;
+					transition: border-color 0.2s;
 				`;
+				codeEditor.onfocus = () => codeEditor.style.borderColor = "#0074D9";
+				codeEditor.onblur = () => codeEditor.style.borderColor = "#555";
 				codeEditor.onchange = () => this.updateSceneCode(scene.id, codeEditor.value);
+				codeEditor.oninput = () => this.updateSceneCode(scene.id, codeEditor.value);
 				
 				let codeExpanded = false;
 				codeToggle.onclick = () => {
 					codeExpanded = !codeExpanded;
 					codeEditor.style.display = codeExpanded ? "block" : "none";
-					codeToggle.textContent = codeExpanded ? "▲ Hide Code" : "▼ Edit Code";
+					codeToggle.innerHTML = codeExpanded 
+						? "<span style='margin-right: 6px;'>▲</span> Hide Code Editor"
+						: "<span style='margin-right: 6px;'>▼</span> Edit Manim Code";
+					if (codeExpanded) {
+						setTimeout(() => codeEditor.focus(), 100);
+					}
 				};
+				
+				// Show code editor if code exists
+				if (scene.manim_code && scene.manim_code.trim()) {
+					codeExpanded = true;
+					codeEditor.style.display = "block";
+					codeToggle.innerHTML = "<span style='margin-right: 6px;'>▲</span> Hide Code Editor";
+				}
 				
 				codeSection.appendChild(codeToggle);
 				codeSection.appendChild(codeEditor);
