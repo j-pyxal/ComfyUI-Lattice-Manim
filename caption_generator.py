@@ -216,7 +216,7 @@ self.add(caption_text)
         sentence_text = ' '.join(w['word'].strip() for w in sentence_words)
         start_time = sentence_words[0]['start']
         end_time = sentence_words[-1]['end']
-        duration = end_time - start_time
+        duration = max(0.01, end_time - start_time)  # Ensure minimum duration
         
         # Escape text properly
         sentence_text_escaped = sentence_text.replace('"', '\\"').replace("'", "\\'")

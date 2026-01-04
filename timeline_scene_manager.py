@@ -58,7 +58,8 @@ class SceneLayer:
     
     def get_duration(self) -> float:
         """Get scene duration in seconds"""
-        return self.end_time - self.start_time
+        duration = self.end_time - self.start_time
+        return max(0.01, duration)  # Ensure minimum duration for Manim
 
 
 class TimelineSceneManager:
@@ -255,11 +256,13 @@ class TimelineScene(Scene):
                 if scene.manim_code:
                     scene_code = scene.manim_code
                 else:
+                    # Ensure duration is positive
+                    safe_duration = max(0.01, duration)
                     scene_code = f"""# Scene {scene.scene_id}: {scene.prompt[:50] if scene.prompt else 'Untitled'}
 # Auto-generated placeholder
 circle = Circle(radius=1, color=BLUE)
 self.add(circle)
-self.play(Create(circle), run_time={duration:.2f})
+self.play(Create(circle), run_time={safe_duration:.2f})
 """
                 
                 # Create a function that executes the scene code
