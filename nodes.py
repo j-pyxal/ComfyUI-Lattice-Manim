@@ -543,13 +543,10 @@ class ManimAudioCaptionNode:
                 logger.debug(f"Manim stdout: {result.stdout}")
                 raise RuntimeError(f"Manim rendering failed. Output file not found.\nLogs:\n{error_msg}")
             
-            # Extract frames using helper function (with automatic frame limiting)
-            image_tensor, width, height = extract_frames_from_video(output_mp4)
+            # Save video and get preview frame (memory-efficient approach)
+            preview_tensor, mask_tensor, saved_video_path = save_video_and_get_preview(output_mp4)
             
-            batch_size, h, w, _ = image_tensor.shape
-            mask_tensor = torch.ones((batch_size, h, w), dtype=torch.float32)
-            
-            return (image_tensor, mask_tensor)
+            return (preview_tensor, mask_tensor)
 
 
 class ManimDataVisualizationNode:
@@ -772,13 +769,10 @@ class DataVisualization(Scene):
                 logger.debug(f"Manim stdout: {result.stdout}")
                 raise RuntimeError(f"Manim rendering failed. Output file not found.\nLogs:\n{error_msg}")
             
-            # Extract frames using helper function (with automatic frame limiting)
-            image_tensor, width, height = extract_frames_from_video(output_mp4)
+            # Save video and get preview frame (memory-efficient approach)
+            preview_tensor, mask_tensor, saved_video_path = save_video_and_get_preview(output_mp4)
             
-            batch_size, h, w, _ = image_tensor.shape
-            mask_tensor = torch.ones((batch_size, h, w), dtype=torch.float32)
-            
-            return (image_tensor, mask_tensor)
+            return (preview_tensor, mask_tensor)
 
 
 class ManimTimelineSceneNode:
@@ -1038,13 +1032,10 @@ config.frame_rate = {frame_rate}
                 logger.debug(f"Manim stdout: {result.stdout}")
                 raise RuntimeError(f"Manim rendering failed. Output file not found.\nLogs:\n{error_msg}")
             
-            # Extract frames using helper function (with automatic frame limiting)
-            image_tensor, width, height = extract_frames_from_video(output_mp4)
-            
-            batch_size, h, w, _ = image_tensor.shape
-            mask_tensor = torch.ones((batch_size, h, w), dtype=torch.float32)
+            # Save video and get preview frame (memory-efficient approach)
+            preview_tensor, mask_tensor, saved_video_path = save_video_and_get_preview(output_mp4)
             
             # Return updated timeline JSON
             updated_timeline_json = timeline_manager.to_json()
             
-            return (image_tensor, mask_tensor, updated_timeline_json)
+            return (preview_tensor, mask_tensor, updated_timeline_json)
