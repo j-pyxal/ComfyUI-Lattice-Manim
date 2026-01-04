@@ -76,14 +76,22 @@ def extract_frames_from_video(video_path: str, max_frames: Optional[int] = None)
         single_frame_mb = height * width * 3 * 4 / (1024**2)
     
     # Safety limit: warn and limit frames if output would be too large
-    # Also check if even the limited frames would be too much
-    max_safe_memory_gb = 2.0  # Absolute maximum we'll try to allocate
+    # Use a more reasonable limit based on resolution
+    # For 1920x1080: ~23MB per frame, so 1000 frames = ~23GB (too much)
+    # We'll use a dynamic limit: try to keep under 8GB for high-res, 2GB for lower res
+    single_frame_gb = height * width * 3 * 4 / (1024**3)
+    if single_frame_gb > 0.01:  # > 10MB per frame (high res)
+        max_safe_memory_gb = 8.0  # Allow up to 8GB for high-res videos
+    else:
+        max_safe_memory_gb = 2.0  # 2GB for lower res
+    
     estimated_limited_gb = max_frames * height * width * 3 * 4 / (1024**3)
     
     if estimated_limited_gb > max_safe_memory_gb:
-        # Reduce frame count further if needed
-        max_frames = int(max_safe_memory_gb * (1024**3) / (height * width * 3 * 4))
-        logger.warning(f"Even {max_frames} frames would require {estimated_limited_gb:.2f} GB. Further limiting to {max_frames} frames.")
+        # Reduce frame count further if needed, but try to keep at least 300 frames
+        calculated_max = int(max_safe_memory_gb * (1024**3) / (height * width * 3 * 4))
+        max_frames = max(300, calculated_max)  # Minimum 300 frames (~10 seconds at 30fps)
+        logger.warning(f"High resolution detected. Limiting to {max_frames} frames ({estimated_limited_gb:.2f} GB -> {max_frames * height * width * 3 * 4 / (1024**3):.2f} GB) to prevent memory issues.")
     
     if total_frames > max_frames:
         logger.warning(f"Video has {total_frames} frames, which would require {estimated_memory_gb:.2f} GB. Limiting to {max_frames} frames to prevent memory issues.")
