@@ -89,15 +89,18 @@ self.add(bg_rect)
 # Add caption text to scene
 self.add(caption_text)
 
-# Animate words word-by-word
+# Animate words word-by-word - synchronized to absolute audio time
 """
+    
+    # Track current time in animation
+    code += "current_time = 0.0\n\n"
     
     # Generate code for each word - build sentence progressively
     for i, word_data in enumerate(valid_words):
         word = word_data['word']
         start = word_data['start']
         end = word_data['end']
-        duration = max(0.1, end - start)  # Ensure minimum duration
+        duration = max(0.01, end - start)  # Ensure minimum duration
         
         # Clean and escape text
         clean_word = word.strip().replace('"', '\\"').replace("'", "\\'")
@@ -108,8 +111,19 @@ self.add(caption_text)
         words_so_far = ' '.join([w['word'].strip() for w in valid_words[:i+1] if w['word'].strip()])
         words_so_far = words_so_far.replace('"', '\\"').replace("'", "\\'")
         
+        # Wait until the word's start time (absolute timing)
+        wait_time = start - (valid_words[i-1]['end'] if i > 0 else 0.0)
+        if i == 0:
+            wait_time = start  # First word: wait until its start time
+        
         code += f"""
 # Word {i}: "{clean_word}" ({start:.2f}s - {end:.2f}s)
+# Wait until word start time (absolute sync with audio)
+if current_time < {start:.3f}:
+    self.wait({start:.3f} - current_time)
+    current_time = {start:.3f}
+
+# Update caption text
 next_caption = Text("{words_so_far}", font="{font}", font_size={font_size}, color={text_color})
 next_caption.to_edge({pos}, buff=0.5)
 
@@ -119,6 +133,7 @@ self.play(
     run_time={duration:.3f}
 )
 caption_text = next_caption
+current_time = {end:.3f}
 """
     
     return code
@@ -295,8 +310,10 @@ self.add(bg_rect)
     code += """
 self.add(sentence_text, word_text)
 
-# Animate
+# Animate - synchronized to absolute audio time
 """
+    
+    code += "current_time = 0.0\n\n"
     
     current_sentence_idx = 0
     current_sentence_words = sentences[0] if sentences else []
@@ -308,7 +325,7 @@ self.add(sentence_text, word_text)
         
         start = word_data['start']
         end = word_data['end']
-        duration = end - start
+        duration = max(0.01, end - start)
         
         # Check if we need to update sentence
         if current_sentence_words and word_data in current_sentence_words:
@@ -328,6 +345,12 @@ self.add(sentence_text, word_text)
         
         code += f"""
 # Word {i}: "{word_escaped}" | Sentence: "{sentence_text_str[:30]}..."
+# Wait until word start time (absolute sync with audio)
+if current_time < {start:.3f}:
+    self.wait({start:.3f} - current_time)
+    current_time = {start:.3f}
+
+# Update caption text
 word_obj = Text("{word_escaped}", font="{font}", font_size={font_size * 0.7}, color=YELLOW)
 sentence_obj = Text("{sentence_escaped}", font="{font}", font_size={font_size}, color={text_color})
 
@@ -342,6 +365,7 @@ self.play(
 )
 word_text = word_obj
 sentence_text = sentence_obj
+current_time = {end:.3f}
 """
     
     return code
