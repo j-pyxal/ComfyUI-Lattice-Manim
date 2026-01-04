@@ -275,9 +275,10 @@ shapes.add(shape_{i})
     code += """
 self.add(shapes)
 
-# Animate shapes appearing with words
+# Animate shapes appearing with words - synchronized to audio time
+shape_current_time = 0.0
 """
-    
+
     for i, word_data in enumerate(captions):
         word = word_data['word'].strip()
         if not word:
@@ -285,15 +286,21 @@ self.add(shapes)
         
         start = word_data['start']
         end = word_data['end']
-        duration = end - start
+        duration = max(0.01, end - start)  # Ensure minimum duration to prevent run_time=0 errors
         
         code += f"""
-# Animate shape {i} for word "{word}"
+# Animate shape {i} for word "{word}" ({start:.2f}s - {end:.2f}s)
+# Wait until word start time (absolute sync with audio)
+if shape_current_time < {start:.3f}:
+    self.wait({start:.3f} - shape_current_time)
+shape_current_time = {start:.3f}
+
 self.play(
     GrowFromCenter(shapes[{i}]),
     run_time={duration:.3f},
     rate_func={easing}
 )
+shape_current_time = {end:.3f}
 """
     
     return code

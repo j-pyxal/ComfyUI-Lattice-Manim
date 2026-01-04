@@ -107,9 +107,9 @@ self.add(caption_text)
         if not clean_word:
             continue
         
-        # Build full sentence up to current word for display
-        words_so_far = ' '.join([w['word'].strip() for w in valid_words[:i+1] if w['word'].strip()])
-        words_so_far = words_so_far.replace('"', '\\"').replace("'", "\\'")
+        # Show only the current word (not accumulating)
+        # Clean and escape the current word for display
+        display_word = clean_word.replace('"', '\\"').replace("'", "\\'")
         
         code += f"""
 # Word {i}: "{clean_word}" ({start:.2f}s - {end:.2f}s)
@@ -118,8 +118,8 @@ if current_time < {start:.3f}:
     self.wait({start:.3f} - current_time)
 current_time = {start:.3f}
 
-# Update caption text
-next_caption = Text("{words_so_far}", font="{font}", font_size={font_size}, color={text_color})
+# Update caption text to show only current word
+next_caption = Text("{display_word}", font="{font}", font_size={font_size}, color={text_color})
 next_caption.to_edge({pos}, buff=0.5)
 
 # Use ReplacementTransform for text content changes
