@@ -1023,6 +1023,7 @@ config.frame_rate = {frame_rate}
                 "manim",
                 "-ql",
                 "--disable_caching",
+                "--format", "png",  # Render as PNG frames
                 "--media_dir", temp_dir,
                 "-o", output_name,
                 script_path
@@ -1035,22 +1036,13 @@ config.frame_rate = {frame_rate}
                 cwd=temp_dir
             )
             
-            # Find output file
-            output_mp4 = None
-            for root, dirs, files in os.walk(temp_dir):
-                for file in files:
-                    if file.endswith('.mp4'):
-                        output_mp4 = os.path.join(root, file)
-                        break
-                if output_mp4:
-                    break
-            
-            if not output_mp4:
+            # Check for errors
+            if result.returncode != 0:
                 error_msg = result.stderr if result.stderr else result.stdout
-                logger.error("Manim rendering failed. Output file not found.")
+                logger.error("Manim rendering failed.")
                 logger.debug(f"Manim stderr: {result.stderr}")
                 logger.debug(f"Manim stdout: {result.stdout}")
-                raise RuntimeError(f"Manim rendering failed. Output file not found.\nLogs:\n{error_msg}")
+                raise RuntimeError(f"Manim rendering failed.\nLogs:\n{error_msg}")
             
             # Save PNG frames and get preview
             preview_tensor, mask_tensor = save_manim_frames(temp_dir)
