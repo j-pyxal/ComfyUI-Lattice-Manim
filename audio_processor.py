@@ -339,18 +339,33 @@ def transcribe_audio(audio_path: str, model_size: str = "base", language: str = 
     if model_key not in _whisper_models:
         logger.info(f"Loading Whisper model: {model_size} on {device} ({compute_type})")
         
-        # Check disk space before attempting download
+        # Check disk space before attempting download (warning only, don't block)
+        # User may have space on other drives or the check might be inaccurate
         try:
-            # Try to get HuggingFace cache directory
-            import huggingface_hub
-            cache_dir = huggingface_hub.constants.HF_HUB_CACHE
-        except (ImportError, AttributeError):
-            cache_dir = os.path.expanduser("~/.cache/huggingface")
-        
-        has_space, error_msg = check_disk_space_for_model(model_size, cache_dir)
-        if not has_space:
-            logger.error(error_msg)
-            raise OSError(f"Insufficient disk space for Whisper model '{model_size}'.\n{error_msg}")
+            # Try to get HuggingFace cache directory from multiple sources
+            cache_dir = None
+            # Check environment variable first
+            if "HF_HOME" in os.environ:
+                cache_dir = os.path.join(os.environ["HF_HOME"], "hub")
+            elif "HF_HUB_CACHE" in os.environ:
+                cache_dir = os.environ["HF_HUB_CACHE"]
+            else:
+                # Try to get from huggingface_hub
+                try:
+                    import huggingface_hub
+                    cache_dir = huggingface_hub.constants.HF_HUB_CACHE
+                except (ImportError, AttributeError):
+                    # Fallback to default location
+                    cache_dir = os.path.expanduser("~/.cache/huggingface")
+            
+            # Check space but only warn, don't block
+            has_space, error_msg = check_disk_space_for_model(model_size, cache_dir)
+            if not has_space:
+                logger.warning(f"Disk space check warning for model '{model_size}':")
+                logger.warning(error_msg)
+                logger.warning("Proceeding with download attempt anyway (check may be inaccurate or cache may be on different drive)")
+        except Exception as e:
+            logger.debug(f"Could not check disk space: {e}. Proceeding with download.")
         
         try:
             _whisper_models[model_key] = WhisperModel(
@@ -362,14 +377,32 @@ def transcribe_audio(audio_path: str, model_size: str = "base", language: str = 
         except OSError as e:
             # Check if it's a disk space error
             if "No space left on device" in str(e) or "Errno 28" in str(e):
+                # Try to get actual cache directory for better error message
+                try:
+                    if "HF_HOME" in os.environ:
+                        actual_cache = os.path.join(os.environ["HF_HOME"], "hub")
+                    elif "HF_HUB_CACHE" in os.environ:
+                        actual_cache = os.environ["HF_HUB_CACHE"]
+                    else:
+                        try:
+                            import huggingface_hub
+                            actual_cache = huggingface_hub.constants.HF_HUB_CACHE
+                        except (ImportError, AttributeError):
+                            actual_cache = os.path.expanduser("~/.cache/huggingface")
+                except Exception:
+                    actual_cache = "unknown"
+                
                 error_msg = (
                     f"Disk space error while downloading Whisper model '{model_size}'.\n"
                     f"  Model size: ~{get_model_size_mb(model_size):.0f} MB\n"
-                    f"  Cache location: {cache_dir}\n"
+                    f"  Cache location: {actual_cache}\n"
                     f"\nSuggested solutions:\n"
-                    f"  1. Free up disk space (need at least {get_model_size_mb(model_size) * 1.2:.0f} MB)\n"
-                    f"  2. Use a smaller model (tiny, base, small, or medium)\n"
-                    f"  3. Change HuggingFace cache directory: set HF_HOME environment variable"
+                    f"  1. Free up disk space on the drive containing the cache\n"
+                    f"  2. Change HuggingFace cache to a drive with more space:\n"
+                    f"     - Set HF_HOME environment variable to a different location\n"
+                    f"     - Or set HF_HUB_CACHE to a different location\n"
+                    f"  3. Use a smaller model (tiny, base, small, or medium)\n"
+                    f"  4. Clear old cached models from {actual_cache}"
                 )
                 logger.error(error_msg)
                 raise OSError(error_msg) from e

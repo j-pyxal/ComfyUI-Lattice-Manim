@@ -26,7 +26,8 @@ except ImportError:
 # Maximum safe number of frames to return (prevents memory issues)
 # This is a starting point - actual limits are calculated dynamically
 # based on resolution in extract_frames_from_video()
-MAX_FRAMES_SAFE = 2000
+# Increased for high-end systems - can handle much more
+MAX_FRAMES_SAFE = 10000  # ~5.5 minutes at 30fps for high-end systems
 
 
 def save_manim_frames(temp_dir: str) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -162,8 +163,9 @@ def extract_frames_from_video(video_path: str, max_frames: Optional[int] = None)
     logger.info(f"Extracting {total_frames} frames ({width}x{height}) - estimated memory: {estimated_memory_gb:.2f} GB")
     
     # Additional safety: if single frame allocation would be too large, downscale resolution
+    # Increased limit for high-end systems (64GB+ RAM can handle much larger frames)
     single_frame_mb = height * width * 3 * 4 / (1024**2)
-    max_single_frame_mb = 50  # If a single frame is > 50MB, downscale
+    max_single_frame_mb = 200  # Increased from 50MB to 200MB for high-end systems
     
     original_width = width
     original_height = height
@@ -178,13 +180,13 @@ def extract_frames_from_video(video_path: str, max_frames: Optional[int] = None)
     
     # Safety limit: warn and limit frames if output would be too large
     # Use a more reasonable limit based on resolution
-    # For 1920x1080: ~23MB per frame, so 1000 frames = ~23GB (too much)
-    # We'll use a dynamic limit: try to keep under 8GB for high-res, 2GB for lower res
+    # For 1920x1080: ~23MB per frame, so 1000 frames = ~23GB
+    # Increased limits for high-end systems (64GB+ RAM can handle 32GB+ easily)
     single_frame_gb = height * width * 3 * 4 / (1024**3)
     if single_frame_gb > 0.01:  # > 10MB per frame (high res)
-        max_safe_memory_gb = 8.0  # Allow up to 8GB for high-res videos
+        max_safe_memory_gb = 32.0  # Increased from 8GB to 32GB for high-res videos on high-end systems
     else:
-        max_safe_memory_gb = 2.0  # 2GB for lower res
+        max_safe_memory_gb = 8.0  # Increased from 2GB to 8GB for lower res
     
     estimated_limited_gb = max_frames * height * width * 3 * 4 / (1024**3)
     
