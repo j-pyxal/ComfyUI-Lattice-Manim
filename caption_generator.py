@@ -180,6 +180,7 @@ self.add(bg_rect)
 """
     
     code += """
+# Add caption text to scene
 self.add(caption_text)
 
 # Animate sentences
