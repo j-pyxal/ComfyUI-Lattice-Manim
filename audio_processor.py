@@ -248,9 +248,7 @@ def transcribe_audio(audio_path: str, model_size: str = "base", language: str = 
         audio_path,
         word_timestamps=True,
         language=language if language else None,
-        beam_size=5,  # Balance between speed and accuracy
-        vad_filter=True,  # Voice activity detection for better performance
-        vad_parameters=dict(min_silence_duration_ms=500)  # Skip silent parts
+        beam_size=5  # Balance between speed and accuracy
     )
     logger.info("Transcription completed")
     
