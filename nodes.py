@@ -81,36 +81,81 @@ def save_manim_frames(temp_dir: str) -> Tuple[torch.Tensor, torch.Tensor]:
     if not frame_files:
         logger.info("No PNG frames found. Searching for MP4 files to extract frames from...")
         mp4_files = []
+        final_video = None
+        partial_videos = []
+        
+        # Search for MP4 files and prioritize final compiled video over partial movies
         for root, dirs, files in os.walk(temp_dir):
             for file in files:
                 if file.endswith('.mp4'):
-                    mp4_files.append(os.path.join(root, file))
+                    full_path = os.path.join(root, file)
+                    # Check if this is a final compiled video (not in partial_movie_files)
+                    if 'partial_movie_files' not in full_path:
+                        # Prefer files named "output" or scene class names
+                        if file.startswith('output') or file.endswith('Scene.mp4') or 'CaptionedScene' in file:
+                            final_video = full_path
+                        else:
+                            partial_videos.append(full_path)
+                    else:
+                        partial_videos.append(full_path)
         
-        if mp4_files:
-            logger.info(f"Found {len(mp4_files)} MP4 file(s). Extracting frames from first video...")
-            # Extract frames from the first (usually main) MP4 file
-            video_path = mp4_files[0]
+        # Prioritize final video, fallback to partial videos
+        video_to_extract = final_video
+        if not video_to_extract and partial_videos:
+            # Sort partial videos by size (larger = more complete) or by name
+            partial_videos.sort(key=lambda x: (os.path.getsize(x) if os.path.exists(x) else 0, x), reverse=True)
+            video_to_extract = partial_videos[0]
+        
+        if video_to_extract:
+            logger.info(f"Extracting frames from: {os.path.basename(video_to_extract)}")
+            logger.debug(f"Full path: {video_to_extract}")
             try:
-                cap = cv2.VideoCapture(video_path)
-                frame_count = 0
-                extracted_frames_dir = os.path.join(temp_dir, "extracted_frames")
-                os.makedirs(extracted_frames_dir, exist_ok=True)
+                cap = cv2.VideoCapture(video_to_extract)
+                if not cap.isOpened():
+                    raise RuntimeError(f"Failed to open video file: {video_to_extract}")
                 
-                while True:
-                    ret, frame = cap.read()
-                    if not ret:
-                        break
+                # Get video properties
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                frame_count_total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                
+                logger.info(f"Video properties: {frame_count_total} frames, {fps:.2f} fps, {width}x{height}")
+                
+                if frame_count_total == 0:
+                    logger.warning("Video has 0 frames - may be corrupted or empty")
+                    cap.release()
+                else:
+                    extracted_frames_dir = os.path.join(temp_dir, "extracted_frames")
+                    os.makedirs(extracted_frames_dir, exist_ok=True)
                     
-                    # Save frame as PNG
-                    frame_filename = os.path.join(extracted_frames_dir, f"frame_{frame_count:06d}.png")
-                    cv2.imwrite(frame_filename, frame)
-                    frame_files.append(frame_filename)
-                    frame_count += 1
-                
-                cap.release()
-                logger.info(f"Extracted {len(frame_files)} frames from {os.path.basename(video_path)}")
+                    frame_count = 0
+                    non_black_frames = 0
+                    
+                    while True:
+                        ret, frame = cap.read()
+                        if not ret:
+                            break
+                        
+                        # Check if frame is not completely black (simple check)
+                        frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                        if cv2.countNonZero(frame_gray) > 0:
+                            non_black_frames += 1
+                        
+                        # Save frame as PNG
+                        frame_filename = os.path.join(extracted_frames_dir, f"frame_{frame_count:06d}.png")
+                        cv2.imwrite(frame_filename, frame)
+                        frame_files.append(frame_filename)
+                        frame_count += 1
+                    
+                    cap.release()
+                    logger.info(f"Extracted {len(frame_files)} frames from {os.path.basename(video_to_extract)}")
+                    logger.info(f"Non-black frames: {non_black_frames} out of {len(frame_files)}")
+                    
+                    if non_black_frames == 0:
+                        logger.warning("All extracted frames appear to be black - Manim scene may not have rendered content")
             except Exception as e:
-                logger.warning(f"Failed to extract frames from MP4: {e}")
+                logger.error(f"Failed to extract frames from MP4: {e}", exc_info=True)
                 # Continue to try other methods
     
     # Sort frames by name (Manim names them with frame numbers)
@@ -148,11 +193,34 @@ def save_manim_frames(temp_dir: str) -> Tuple[torch.Tensor, torch.Tensor]:
     
     logger.info(f"Saved {len(saved_frames)} frames to: {output_dir}")
     
-    # Load first frame for preview
+    # Load first frame for preview - try to find a non-black frame if possible
     first_frame_path = saved_frames[0]
-    first_frame = cv2.imread(first_frame_path)
+    preview_frame_path = first_frame_path
+    
+    # Try to find a non-black frame for preview (skip initial black frames)
+    for frame_path in saved_frames[:min(30, len(saved_frames))]:  # Check first 30 frames
+        test_frame = cv2.imread(frame_path)
+        if test_frame is not None:
+            test_gray = cv2.cvtColor(test_frame, cv2.COLOR_BGR2GRAY)
+            if cv2.countNonZero(test_gray) > 0:  # Has non-black pixels
+                preview_frame_path = frame_path
+                logger.debug(f"Using non-black frame for preview: {os.path.basename(preview_frame_path)}")
+                break
+    
+    first_frame = cv2.imread(preview_frame_path)
     if first_frame is None:
-        raise RuntimeError(f"Failed to read first frame: {first_frame_path}")
+        raise RuntimeError(f"Failed to read preview frame: {preview_frame_path}")
+    
+    # Check if frame is completely black
+    frame_gray = cv2.cvtColor(first_frame, cv2.COLOR_BGR2GRAY)
+    non_black_pixels = cv2.countNonZero(frame_gray)
+    total_pixels = frame_gray.shape[0] * frame_gray.shape[1]
+    black_ratio = 1.0 - (non_black_pixels / total_pixels) if total_pixels > 0 else 1.0
+    
+    if black_ratio > 0.99:
+        logger.warning(f"Preview frame appears to be mostly black ({black_ratio*100:.1f}% black pixels)")
+        logger.warning("This may indicate the Manim scene did not render visible content")
+        logger.warning("Check the generated Manim code to ensure it creates visible objects")
     
     # Convert BGR to RGB and normalize
     frame_rgb = cv2.cvtColor(first_frame, cv2.COLOR_BGR2RGB)
@@ -163,6 +231,8 @@ def save_manim_frames(temp_dir: str) -> Tuple[torch.Tensor, torch.Tensor]:
     # Create mask for single frame
     h, w, _ = preview_tensor.shape[1:]
     mask_tensor = torch.ones((1, h, w), dtype=torch.float32)
+    
+    logger.info(f"Preview frame: {os.path.basename(preview_frame_path)}, size: {w}x{h}, black ratio: {black_ratio*100:.1f}%")
     
     return preview_tensor, mask_tensor
 
@@ -548,6 +618,13 @@ class ManimAudioCaptionNode:
             script_path = os.path.join(temp_dir, "script.py")
             
             logger.info("Writing Manim script to file...")
+            logger.debug(f"Generated Manim code preview (first 1000 chars):\n{full_code[:1000]}")
+            logger.debug(f"Generated Manim code length: {len(full_code)} characters")
+            
+            # Check if code has visible content
+            if "self.add(" not in full_code and "self.play(" not in full_code:
+                logger.warning("Generated Manim code may not have visible content - no self.add() or self.play() calls found")
+            
             with open(script_path, "w", encoding="utf-8") as f:
                 f.write(full_code)
             logger.info(f"Script written to: {script_path}")
@@ -589,6 +666,21 @@ class ManimAudioCaptionNode:
             
             # Save PNG frames and get preview
             logger.info("Extracting PNG frames from Manim output...")
+            
+            # Log Manim output directory structure for debugging
+            logger.debug("Manim output directory structure:")
+            for root, dirs, files in os.walk(temp_dir):
+                level = root.replace(temp_dir, '').count(os.sep)
+                indent = ' ' * 2 * level
+                logger.debug(f"{indent}{os.path.basename(root)}/")
+                subindent = ' ' * 2 * (level + 1)
+                for file in files[:5]:  # Show first 5 files per directory
+                    file_path = os.path.join(root, file)
+                    file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+                    logger.debug(f"{subindent}{file} ({file_size} bytes)")
+                if len(files) > 5:
+                    logger.debug(f"{subindent}... and {len(files) - 5} more files")
+            
             preview_tensor, mask_tensor = save_manim_frames(temp_dir)
             logger.info("Frame extraction complete")
             
