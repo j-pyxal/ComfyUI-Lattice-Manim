@@ -77,25 +77,61 @@ def save_manim_frames(temp_dir: str) -> Tuple[torch.Tensor, torch.Tensor]:
                 if file.endswith('.png'):
                     frame_files.append(os.path.join(root, file))
     
+    # If still no PNGs, try extracting from MP4 video files
+    if not frame_files:
+        logger.info("No PNG frames found. Searching for MP4 files to extract frames from...")
+        mp4_files = []
+        for root, dirs, files in os.walk(temp_dir):
+            for file in files:
+                if file.endswith('.mp4'):
+                    mp4_files.append(os.path.join(root, file))
+        
+        if mp4_files:
+            logger.info(f"Found {len(mp4_files)} MP4 file(s). Extracting frames from first video...")
+            # Extract frames from the first (usually main) MP4 file
+            video_path = mp4_files[0]
+            try:
+                cap = cv2.VideoCapture(video_path)
+                frame_count = 0
+                extracted_frames_dir = os.path.join(temp_dir, "extracted_frames")
+                os.makedirs(extracted_frames_dir, exist_ok=True)
+                
+                while True:
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+                    
+                    # Save frame as PNG
+                    frame_filename = os.path.join(extracted_frames_dir, f"frame_{frame_count:06d}.png")
+                    cv2.imwrite(frame_filename, frame)
+                    frame_files.append(frame_filename)
+                    frame_count += 1
+                
+                cap.release()
+                logger.info(f"Extracted {len(frame_files)} frames from {os.path.basename(video_path)}")
+            except Exception as e:
+                logger.warning(f"Failed to extract frames from MP4: {e}")
+                # Continue to try other methods
+    
     # Sort frames by name (Manim names them with frame numbers)
     frame_files.sort()
     
     if not frame_files:
         # Log directory structure for debugging
-        logger.error(f"No PNG frames found. Searching in: {temp_dir}")
+        logger.error(f"No PNG frames or MP4 files found. Searching in: {temp_dir}")
         logger.debug(f"Directory structure:")
         for root, dirs, files in os.walk(temp_dir):
             level = root.replace(temp_dir, '').count(os.sep)
             indent = ' ' * 2 * level
             logger.debug(f"{indent}{os.path.basename(root)}/")
             subindent = ' ' * 2 * (level + 1)
-            for file in files[:5]:  # Show first 5 files
+            for file in files[:10]:  # Show first 10 files
                 logger.debug(f"{subindent}{file}")
-            if len(files) > 5:
-                logger.debug(f"{subindent}... and {len(files) - 5} more files")
+            if len(files) > 10:
+                logger.debug(f"{subindent}... and {len(files) - 10} more files")
         
         raise RuntimeError(
-            f"No PNG frames found in Manim output directory: {temp_dir}\n"
+            f"No PNG frames or extractable MP4 files found in Manim output directory: {temp_dir}\n"
             f"Manim may not have rendered frames correctly. Check Manim logs above for errors."
         )
     
